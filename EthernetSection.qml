@@ -119,8 +119,11 @@ Item {
     dnsInput.text = seed.dns
   }
 
-  // Called from ProfileList (added in a later task) to fill the form from a
-  // saved profile without applying it yet.
+  // Called from ProfileList: fills the form from a saved profile AND
+  // applies it immediately -- with a saved profile on hand there's no
+  // reason to make the user open the raw fields and press Apply again just
+  // to reapply something already known-good. Manual entry stays reserved
+  // for actually typing or editing values (see manualEntryOpen below).
   function applyProfileToForm(profile) {
     if (formMode !== "manual") selectMode("manual")
     addressField = profile.address || ""
@@ -129,12 +132,21 @@ Item {
     addressInput.text = addressField
     gatewayInput.text = gatewayField
     dnsInput.text = dnsField
+    applyStatic()
   }
+
+  // Two independent disclosures: the whole IPv4 area (rarely needed once
+  // a network is set up) and, within Static mode, the raw address/gateway/
+  // DNS fields (only needed to type a new config or edit an existing one --
+  // applying a saved profile never needs them open).
+  property bool ipv4SectionOpen: false
+  property bool manualEntryOpen: false
 
   function selectMode(mode) {
     if (busy) return
     if (mode === "auto") {
       formMode = "auto"
+      manualEntryOpen = false
       applyDhcp()
       return
     }
@@ -420,142 +432,205 @@ Item {
       width: parent.width
       spacing: Style.space(10)
 
-      PanelSectionHeader {
-        text: "ETHERNET IPV4 CONFIGURATION"
-        foreground: root.bar.foreground
-        fontFamily: root.bar.fontFamily
-      }
-
-      Text {
-        textFormat: Text.PlainText
-        visible: !root.hasProfile
-        text: "Plug in a cable once so NetworkManager can create a wired profile."
-        color: Qt.darker(root.bar.foreground, 1.4)
-        font.family: root.bar.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        wrapMode: Text.WordWrap
-        width: parent.width
-      }
-
-      Row {
-        visible: root.hasProfile
-        width: parent.width
-        spacing: Style.space(6)
-
-        readonly property real cellWidth: (width - spacing) / 2
-
-        Button {
-          text: "DHCP"
-          fontSize: Style.font.bodySmall
-          foreground: root.bar.foreground
-          fontFamily: root.bar.fontFamily
-          horizontalPadding: Style.spacing.controlPaddingX
-          verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-          bordered: true
-          width: parent.cellWidth
-          active: root.formMode === "auto"
-          onClicked: root.selectMode("auto")
-        }
-
-        Button {
-          text: "Static"
-          fontSize: Style.font.bodySmall
-          foreground: root.bar.foreground
-          fontFamily: root.bar.fontFamily
-          horizontalPadding: Style.spacing.controlPaddingX
-          verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-          bordered: true
-          width: parent.cellWidth
-          active: root.formMode === "manual"
-          onClicked: root.selectMode("manual")
-        }
-      }
-
-      // Collapsing container so switching back to DHCP slides the form
-      // away instead of snapping.
+      // Clickable header: the whole IPv4 area collapses away by default --
+      // once a network is set up (DHCP working, or a saved static profile),
+      // there's rarely a reason to look at this again.
       Item {
-        id: staticFormClip
+        width: parent.width
+        implicitHeight: ipv4Header.implicitHeight
+
+        PanelSectionHeader {
+          id: ipv4Header
+          text: "ETHERNET IPV4 CONFIGURATION " + (root.ipv4SectionOpen ? "▾" : "▸")
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.ipv4SectionOpen = !root.ipv4SectionOpen
+        }
+      }
+
+      Item {
+        id: ipv4Clip
         width: parent.width
         clip: true
         visible: height > 0
-        height: (root.hasProfile && root.formMode === "manual") ? staticForm.implicitHeight : 0
+        height: root.ipv4SectionOpen ? ipv4Body.implicitHeight : 0
 
         Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
         Column {
-          id: staticForm
+          id: ipv4Body
           width: parent.width
           spacing: Style.space(10)
 
-          ProfileList {
-            id: profileList
-            width: parent.width
-            bar: root.bar
-            currentAddress: root.addressField
-            currentGateway: root.gatewayField
-            currentDns: root.dnsField
-            onApplyRequested: function(profile) { root.applyProfileToForm(profile) }
-          }
-
-          PanelSeparator {
-            foreground: root.bar.foreground
-          }
-
-          TextField {
-            id: addressInput
-            width: parent.width
-            placeholderText: "IP Address / prefix (e.g. 192.168.1.50/24)"
-            font.pixelSize: Style.font.bodySmall
-            foreground: root.bar.foreground
-            horizontalPadding: Style.spacing.controlGap
-            verticalPadding: Style.spacing.controlPaddingY
-            onTextChanged: root.addressField = text
-          }
-
-          TextField {
-            id: gatewayInput
-            width: parent.width
-            placeholderText: "Gateway (optional)"
-            font.pixelSize: Style.font.bodySmall
-            foreground: root.bar.foreground
-            horizontalPadding: Style.spacing.controlGap
-            verticalPadding: Style.spacing.controlPaddingY
-            onTextChanged: root.gatewayField = text
-          }
-
-          TextField {
-            id: dnsInput
-            width: parent.width
-            placeholderText: "DNS servers (optional, space or comma separated)"
-            font.pixelSize: Style.font.bodySmall
-            foreground: root.bar.foreground
-            horizontalPadding: Style.spacing.controlGap
-            verticalPadding: Style.spacing.controlPaddingY
-            onTextChanged: root.dnsField = text
-          }
-
           Text {
             textFormat: Text.PlainText
-            visible: root.lastError !== ""
-            text: root.lastError
-            color: root.bar.urgent
+            visible: !root.hasProfile
+            text: "Plug in a cable once so NetworkManager can create a wired profile."
+            color: Qt.darker(root.bar.foreground, 1.4)
             font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.bodySmall
             wrapMode: Text.WordWrap
             width: parent.width
           }
 
-          Button {
-            text: root.pendingAction === "apply-static" ? "Applying…" : "Apply"
-            fontSize: Style.font.bodySmall
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-            horizontalPadding: Style.spacing.controlPaddingX
-            verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-            bordered: true
+          Row {
+            visible: root.hasProfile
             width: parent.width
-            enabled: root.canApply && !root.busy
-            onClicked: root.applyStatic()
+            spacing: Style.space(6)
+
+            readonly property real cellWidth: (width - spacing) / 2
+
+            Button {
+              text: "DHCP"
+              fontSize: Style.font.bodySmall
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              horizontalPadding: Style.spacing.controlPaddingX
+              verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+              bordered: true
+              width: parent.cellWidth
+              active: root.formMode === "auto"
+              onClicked: root.selectMode("auto")
+            }
+
+            Button {
+              text: "Static"
+              fontSize: Style.font.bodySmall
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              horizontalPadding: Style.spacing.controlPaddingX
+              verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+              bordered: true
+              width: parent.cellWidth
+              active: root.formMode === "manual"
+              onClicked: root.selectMode("manual")
+            }
+          }
+
+          // Collapsing container so switching back to DHCP slides the form
+          // away instead of snapping.
+          Item {
+            id: staticFormClip
+            width: parent.width
+            clip: true
+            visible: height > 0
+            height: (root.hasProfile && root.formMode === "manual") ? staticForm.implicitHeight : 0
+
+            Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+            Column {
+              id: staticForm
+              width: parent.width
+              spacing: Style.space(10)
+
+              ProfileList {
+                id: profileList
+                width: parent.width
+                bar: root.bar
+                currentAddress: root.addressField
+                currentGateway: root.gatewayField
+                currentDns: root.dnsField
+                onApplyRequested: function(profile) { root.applyProfileToForm(profile) }
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                visible: root.lastError !== ""
+                text: root.lastError
+                color: root.bar.urgent
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+                width: parent.width
+              }
+
+              PanelSeparator {
+                foreground: root.bar.foreground
+              }
+
+              // Raw address/gateway/DNS fields only matter for typing a
+              // brand-new config or editing one -- applying a saved profile
+              // (above) never needs them, so they stay hidden until asked for.
+              Button {
+                visible: !root.manualEntryOpen
+                text: "Enter manually…"
+                fontSize: Style.font.bodySmall
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                horizontalPadding: Style.spacing.controlPaddingX
+                verticalPadding: Style.spacing.controlPaddingY
+                bordered: true
+                width: parent.width
+                onClicked: root.manualEntryOpen = true
+              }
+
+              Item {
+                id: manualEntryClip
+                width: parent.width
+                clip: true
+                visible: height > 0
+                height: root.manualEntryOpen ? manualEntryForm.implicitHeight : 0
+
+                Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+                Column {
+                  id: manualEntryForm
+                  width: parent.width
+                  spacing: Style.space(10)
+
+                  TextField {
+                    id: addressInput
+                    width: parent.width
+                    placeholderText: "IP Address / prefix (e.g. 192.168.1.50/24)"
+                    font.pixelSize: Style.font.bodySmall
+                    foreground: root.bar.foreground
+                    horizontalPadding: Style.spacing.controlGap
+                    verticalPadding: Style.spacing.controlPaddingY
+                    onTextChanged: root.addressField = text
+                  }
+
+                  TextField {
+                    id: gatewayInput
+                    width: parent.width
+                    placeholderText: "Gateway (optional)"
+                    font.pixelSize: Style.font.bodySmall
+                    foreground: root.bar.foreground
+                    horizontalPadding: Style.spacing.controlGap
+                    verticalPadding: Style.spacing.controlPaddingY
+                    onTextChanged: root.gatewayField = text
+                  }
+
+                  TextField {
+                    id: dnsInput
+                    width: parent.width
+                    placeholderText: "DNS servers (optional, space or comma separated)"
+                    font.pixelSize: Style.font.bodySmall
+                    foreground: root.bar.foreground
+                    horizontalPadding: Style.spacing.controlGap
+                    verticalPadding: Style.spacing.controlPaddingY
+                    onTextChanged: root.dnsField = text
+                  }
+
+                  Button {
+                    text: root.pendingAction === "apply-static" ? "Applying…" : "Apply"
+                    fontSize: Style.font.bodySmall
+                    foreground: root.bar.foreground
+                    fontFamily: root.bar.fontFamily
+                    horizontalPadding: Style.spacing.controlPaddingX
+                    verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+                    bordered: true
+                    width: parent.width
+                    enabled: root.canApply && !root.busy
+                    onClicked: root.applyStatic()
+                  }
+                }
+              }
+            }
           }
         }
       }
