@@ -99,6 +99,30 @@ function normalizeDns(text) {
   return parts.join(",")
 }
 
+// Wi-Fi has no "cable" concept, so its link states are shaped differently
+// from Ethernet's -- "disabled" (radio off) has no wired equivalent, and
+// there is no "connecting with no adapter" ambiguity to resolve.
+function wifiLinkState(info, wifiEnabled) {
+  var value = info || {}
+  if (value.state === "no-device") return "no-device"
+  if (wifiEnabled === false) return "disabled"
+  if (String(value.nmstate || "").indexOf("100") === 0) return "connected"
+  return "disconnected"
+}
+
+function wifiStatusText(state) {
+  if (state === "no-device") return "No Wi-Fi adapter"
+  if (state === "disabled") return "Wi-Fi is off"
+  if (state === "connected") return "Connected"
+  return "Not connected"
+}
+
+function wifiIconFor(strength) {
+  var icons = ["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"]
+  var index = Math.max(0, Math.min(4, Math.ceil(strength / 20) - 1))
+  return icons[index]
+}
+
 // ---- Throughput + ping stats (per interface) ----
 // Ported from the built-in omarchy.network widget's Model.js -- same pure
 // logic, duplicated rather than imported since that plugin stays untouched
@@ -244,6 +268,9 @@ if (typeof module !== "undefined") {
     parseKeyValue: parseKeyValue,
     linkState: linkState,
     statusText: statusText,
+    wifiLinkState: wifiLinkState,
+    wifiStatusText: wifiStatusText,
+    wifiIconFor: wifiIconFor,
     formatSpeed: formatSpeed,
     firstValue: firstValue,
     isManualMethod: isManualMethod,

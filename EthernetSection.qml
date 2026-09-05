@@ -63,9 +63,18 @@ Item {
   // Panel.qml sets this to the sibling section's current metric so the
   // "Primary" pill reflects the real comparison, not a fixed threshold.
   property var primaryCompareMetric: undefined
+  // A metric change on its own only updates the saved profile -- it doesn't
+  // retroactively touch the kernel's live routing table for an already-
+  // active connection, so `connection up` has to follow the modify (same
+  // two-step sequence already validated live: modify, then reactivate).
+  readonly property string setMetricScript:
+    "conn=$1; metric=$2\n" +
+    "nmcli connection modify \"$conn\" ipv4.route-metric \"$metric\" || exit 1\n" +
+    "nmcli connection up \"$conn\" >/dev/null 2>&1 || true\n"
+
   function setRouteMetric(metric) {
     if (!hasProfile) return
-    metricProc.command = ["nmcli", "connection", "modify", info.connection, "ipv4.route-metric", String(metric)]
+    metricProc.command = ["bash", "-c", setMetricScript, "ethernet-metric", info.connection, String(metric)]
     metricProc.running = true
   }
   signal routeMetricApplied()

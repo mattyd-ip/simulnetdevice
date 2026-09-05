@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Io
 import qs.Ui
 import qs.Commons
+import "Model.js" as Model
 
 // Bar icon + popup shell for netctl. Wi-Fi and Ethernet each get their own
 // self-contained section component (EthernetSection.qml, WifiSection.qml)
@@ -16,12 +17,19 @@ Panel {
   ipcTarget: "netctl"
   manageIpc: false
 
-  // Bar icon currently mirrors Ethernet alone; becomes a real priority rule
-  // between both sections once WifiSection lands.
-  readonly property string icon: ethernetSection.icon
-  readonly property real iconOpacity: ethernetSection.iconOpacity
+  // Bar icon: whichever interface is primary wins when both are connected;
+  // otherwise whichever one is connected; otherwise Wi-Fi's icon (off/no
+  // adapter) as the more common case to default to on a laptop.
+  readonly property string icon: {
+    if (ethernetSection.isConnected && wifiSection.isConnected) {
+      return ethernetSection.isPrimary ? ethernetSection.icon : wifiSection.icon
+    }
+    if (ethernetSection.isConnected) return ethernetSection.icon
+    return wifiSection.icon
+  }
+  readonly property real iconOpacity: (ethernetSection.isConnected || wifiSection.isConnected) ? 1.0 : 0.5
 
-  visible: ethernetSection.hasAdapter
+  visible: ethernetSection.hasAdapter || wifiSection.hasAdapter
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -72,11 +80,28 @@ Panel {
         anchors.top: parent.top
         spacing: Style.space(16)
 
+        WifiSection {
+          id: wifiSection
+          width: parent.width
+          bar: root.bar
+          opened: root.opened
+          // Cross-wired so each section's "Set primary" reflects the real
+          // comparison against the other's actual metric, not a guess.
+          primaryCompareMetric: ethernetSection.routeMetric
+          onRouteMetricApplied: ethernetSection.setRouteMetric(Model.SECONDARY_METRIC)
+        }
+
+        PanelSeparator {
+          foreground: root.bar.foreground
+        }
+
         EthernetSection {
           id: ethernetSection
           width: parent.width
           bar: root.bar
           opened: root.opened
+          primaryCompareMetric: wifiSection.routeMetric
+          onRouteMetricApplied: wifiSection.setRouteMetric(Model.SECONDARY_METRIC)
         }
       }
     }
