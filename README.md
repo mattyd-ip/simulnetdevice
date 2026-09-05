@@ -71,6 +71,12 @@ The built-in widget is left untouched and can be re-enabled as a fallback
 - **Static-IP profiles are Ethernet-only right now**, though the data model
   doesn't assume that — extending the picker to Wi-Fi later is
   straightforward.
+- **No per-process bandwidth monitoring**, by choice. Investigated two
+  approaches — `nethogs` running as root (needs a persistent privileged
+  daemon and a new sudoers rule) and sampling `ss -tip` every few seconds
+  (no root needed, but TCP-only) — and decided against adding either: it's
+  bloat this plugin doesn't need to stay useful, and other plugins already
+  cover this ground.
 
 ## Troubleshooting
 
@@ -99,17 +105,6 @@ The built-in widget is left untouched and can be re-enabled as a fallback
     new privilege-escalation surface). If DHCP keeps coming back without a
     gateway even after switching back from Static, a physical replug is
     the reliable way to actually reset the other end's state.
-
-## Upcoming / planned
-
-- **Per-process bandwidth monitoring.** Deliberately deferred out of the
-  initial build because it needs a real privilege-elevation subsystem: the
-  only reliable way to attribute network traffic to a specific process on
-  Linux is `nethogs` running as root, which means installing it, a one-time
-  passwordless-sudo rule (same pattern the built-in `omarchy-dns` helper
-  uses), and a persistent privileged process whose streaming output gets
-  parsed incrementally in QML. This will be its own follow-up plan rather
-  than bolted onto the current one.
 
 ## Repo layout
 
