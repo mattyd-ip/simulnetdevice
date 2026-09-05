@@ -149,11 +149,13 @@ Item {
     applyStatic()
   }
 
-  // Two independent disclosures: the whole IPv4 area (rarely needed once
-  // a network is set up) and, within Static mode, the raw address/gateway/
-  // DNS fields (only needed to type a new config or edit an existing one --
-  // applying a saved profile never needs them open).
-  property bool ipv4SectionOpen: false
+  // Two independent disclosures: the static fields area (ProfileList + the
+  // raw manual-entry fields), opened by clicking "Static" and closed by
+  // clicking "Static" again or by the whole panel closing -- and, nested
+  // inside that, the raw address/gateway/DNS fields themselves, only
+  // needed to type a new config or edit an existing one (applying a saved
+  // profile never needs them open).
+  property bool staticPanelOpen: false
   property bool manualEntryOpen: false
 
   function selectMode(mode) {
@@ -161,11 +163,24 @@ Item {
     if (mode === "auto") {
       formMode = "auto"
       manualEntryOpen = false
+      staticPanelOpen = false
       applyDhcp()
+      return
+    }
+    // Second click on "Static" while the fields are already open: just
+    // close them back up. Only actually switch away from "manual" if
+    // nothing static is really applied -- if a static profile IS live,
+    // the Static button should stay the selected one even with the
+    // fields tucked away.
+    if (staticPanelOpen) {
+      staticPanelOpen = false
+      manualEntryOpen = false
+      if (!Model.isManualMethod(info.method)) formMode = "auto"
       return
     }
     if (formMode !== "manual") seedStaticFields()
     formMode = "manual"
+    staticPanelOpen = true
   }
 
   // Only ever syncs FROM the live profile INTO "manual" (to reflect a
@@ -207,6 +222,13 @@ Item {
   // IPv4 only, and args are passed positionally rather than interpolated
   // into the script string -- user-typed IP/gateway/DNS values never touch
   // shell parsing.
+  // A plain `nmcli connection up` on an already-active profile doesn't
+  // reliably force a fresh DHCP negotiation when switching off a static
+  // config -- NetworkManager can treat it as a no-op reapply and leave the
+  // interface sitting disconnected. Cycling down first forces a real
+  // reactivation, and the final `up`'s exit code is no longer swallowed
+  // with `|| true`, so a genuine reconnect failure surfaces as an error
+  // instead of silently reporting success.
   readonly property string applyIpv4Script:
     "mode=$1; conn=$2; addr=$3; gw=$4; dns=$5\n" +
     "if [[ -z $conn ]]; then echo 'No connection profile' >&2; exit 1; fi\n" +
@@ -215,7 +237,8 @@ Item {
     "else\n" +
     "  nmcli connection modify \"$conn\" ipv4.method auto ipv4.addresses '' ipv4.gateway '' ipv4.dns '' ipv4.ignore-auto-dns no || exit 1\n" +
     "fi\n" +
-    "nmcli connection up \"$conn\" >/dev/null 2>&1 || true\n"
+    "nmcli connection down \"$conn\" >/dev/null 2>&1 || true\n" +
+    "nmcli connection up \"$conn\" || exit 1\n"
 
   function applyDhcp() {
     if (busy || !hasProfile) return
@@ -328,8 +351,13 @@ Item {
 
   onIfaceChanged: { formMode = "auto"; refresh() }
   onOpenedChanged: {
-    if (opened) refresh()
-    else statsGrid.reset()
+    if (opened) {
+      refresh()
+    } else {
+      statsGrid.reset()
+      staticPanelOpen = false
+      manualEntryOpen = false
+    }
   }
 
   Column {
@@ -425,16 +453,6 @@ Item {
           elide: Text.ElideRight
           width: parent.width
         }
-        Text {
-          textFormat: Text.PlainText
-          visible: root.currentProfileName !== ""
-          text: root.currentProfileName
-          color: Qt.darker(root.bar.foreground, 1.2)
-          font.family: root.bar.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
-          width: parent.width
-        }
       }
     }
 
@@ -461,142 +479,130 @@ Item {
       width: parent.width
       spacing: Style.space(10)
 
-      // Clickable header: the whole IPv4 area collapses away by default --
-      // once a network is set up (DHCP working, or a saved static profile),
-      // there's rarely a reason to look at this again.
-      Item {
-        width: parent.width
-        implicitHeight: ipv4Header.implicitHeight
+      PanelSectionHeader {
+        text: "ETHERNET IPV4 CONFIGURATION"
+        foreground: root.bar.foreground
+        fontFamily: root.bar.fontFamily
+      }
 
-        PanelSectionHeader {
-          id: ipv4Header
-          text: "ETHERNET IPV4 CONFIGURATION " + (root.ipv4SectionOpen ? "▾" : "▸")
+      Text {
+        textFormat: Text.PlainText
+        visible: !root.hasProfile
+        text: "Plug in a cable once so NetworkManager can create a wired profile."
+        color: Qt.darker(root.bar.foreground, 1.4)
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        wrapMode: Text.WordWrap
+        width: parent.width
+      }
+
+      // Always visible, not tucked behind a disclosure -- clicking "Static"
+      // is itself what opens the fields below; clicking it again (or
+      // closing the whole panel) is what closes them back up.
+      Row {
+        visible: root.hasProfile
+        width: parent.width
+        spacing: Style.space(6)
+
+        readonly property real cellWidth: (width - spacing) / 2
+
+        Button {
+          text: "DHCP"
+          fontSize: Style.font.bodySmall
           foreground: root.bar.foreground
           fontFamily: root.bar.fontFamily
+          horizontalPadding: Style.spacing.controlPaddingX
+          verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+          bordered: true
+          width: parent.cellWidth
+          active: root.formMode === "auto"
+          onClicked: root.selectMode("auto")
         }
 
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: root.ipv4SectionOpen = !root.ipv4SectionOpen
+        Button {
+          text: "Static"
+          fontSize: Style.font.bodySmall
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+          horizontalPadding: Style.spacing.controlPaddingX
+          verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+          bordered: true
+          width: parent.cellWidth
+          active: root.formMode === "manual"
+          onClicked: root.selectMode("manual")
         }
       }
 
+      // The applied static profile's name, if any -- kept visible right
+      // under the DHCP/Static row regardless of whether the fields below
+      // are open, so it doesn't require reopening them just to check.
+      Text {
+        textFormat: Text.PlainText
+        visible: root.currentProfileName !== ""
+        text: root.currentProfileName
+        color: Qt.darker(root.bar.foreground, 1.2)
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+        width: parent.width
+      }
+
+      // Collapsing container, opened/closed only by the Static button (or
+      // the panel closing) -- not by switching back to DHCP mid-edit.
       Item {
-        id: ipv4Clip
+        id: staticFormClip
         width: parent.width
         clip: true
         visible: height > 0
-        height: root.ipv4SectionOpen ? ipv4Body.implicitHeight : 0
+        height: (root.hasProfile && root.staticPanelOpen) ? staticForm.implicitHeight : 0
 
         Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
         Column {
-          id: ipv4Body
+          id: staticForm
           width: parent.width
           spacing: Style.space(10)
 
+          ProfileList {
+            id: profileList
+            width: parent.width
+            bar: root.bar
+            currentAddress: root.addressField
+            currentGateway: root.gatewayField
+            currentDns: root.dnsField
+            onApplyRequested: function(profile) { root.applyProfileToForm(profile) }
+          }
+
           Text {
             textFormat: Text.PlainText
-            visible: !root.hasProfile
-            text: "Plug in a cable once so NetworkManager can create a wired profile."
-            color: Qt.darker(root.bar.foreground, 1.4)
+            visible: root.lastError !== ""
+            text: root.lastError
+            color: root.bar.urgent
             font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.bodySmall
+            font.pixelSize: Style.font.caption
             wrapMode: Text.WordWrap
             width: parent.width
           }
 
-          Row {
-            visible: root.hasProfile
-            width: parent.width
-            spacing: Style.space(6)
-
-            readonly property real cellWidth: (width - spacing) / 2
-
-            Button {
-              text: "DHCP"
-              fontSize: Style.font.bodySmall
-              foreground: root.bar.foreground
-              fontFamily: root.bar.fontFamily
-              horizontalPadding: Style.spacing.controlPaddingX
-              verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-              bordered: true
-              width: parent.cellWidth
-              active: root.formMode === "auto"
-              onClicked: root.selectMode("auto")
-            }
-
-            Button {
-              text: "Static"
-              fontSize: Style.font.bodySmall
-              foreground: root.bar.foreground
-              fontFamily: root.bar.fontFamily
-              horizontalPadding: Style.spacing.controlPaddingX
-              verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-              bordered: true
-              width: parent.cellWidth
-              active: root.formMode === "manual"
-              onClicked: root.selectMode("manual")
-            }
+          PanelSeparator {
+            foreground: root.bar.foreground
           }
 
-          // Collapsing container so switching back to DHCP slides the form
-          // away instead of snapping.
-          Item {
-            id: staticFormClip
+          // Raw address/gateway/DNS fields only matter for typing a
+          // brand-new config or editing one -- applying a saved profile
+          // (above) never needs them, so they stay hidden until asked for.
+          Button {
+            visible: !root.manualEntryOpen
+            text: "Enter manually…"
+            fontSize: Style.font.bodySmall
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY
+            bordered: true
             width: parent.width
-            clip: true
-            visible: height > 0
-            height: (root.hasProfile && root.formMode === "manual") ? staticForm.implicitHeight : 0
-
-            Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-
-            Column {
-              id: staticForm
-              width: parent.width
-              spacing: Style.space(10)
-
-              ProfileList {
-                id: profileList
-                width: parent.width
-                bar: root.bar
-                currentAddress: root.addressField
-                currentGateway: root.gatewayField
-                currentDns: root.dnsField
-                onApplyRequested: function(profile) { root.applyProfileToForm(profile) }
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                visible: root.lastError !== ""
-                text: root.lastError
-                color: root.bar.urgent
-                font.family: root.bar.fontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WordWrap
-                width: parent.width
-              }
-
-              PanelSeparator {
-                foreground: root.bar.foreground
-              }
-
-              // Raw address/gateway/DNS fields only matter for typing a
-              // brand-new config or editing one -- applying a saved profile
-              // (above) never needs them, so they stay hidden until asked for.
-              Button {
-                visible: !root.manualEntryOpen
-                text: "Enter manually…"
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                horizontalPadding: Style.spacing.controlPaddingX
-                verticalPadding: Style.spacing.controlPaddingY
-                bordered: true
-                width: parent.width
-                onClicked: root.manualEntryOpen = true
-              }
+            onClicked: root.manualEntryOpen = true
+          }
 
               Item {
                 id: manualEntryClip
@@ -663,8 +669,6 @@ Item {
           }
         }
       }
-    }
-  }
 
   // Static-IP text fields own their own keys while focused -- used by
   // Panel.qml's PanelKeyCatcher.blocked so h/j/k/l and space type normally.

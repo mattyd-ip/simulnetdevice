@@ -31,20 +31,24 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   default.
 - **Wi-Fi radio on/off** toggle.
 - **Ethernet connect/disconnect** toggle.
-- **DHCP / Static IPv4 toggle for Ethernet**, tucked behind a collapsible
-  "Ethernet IPv4 Configuration" section that stays closed until you need
-  it. Static mode leads with your saved profiles (below) rather than raw
-  fields — the address/gateway/DNS entry fields stay hidden behind an
-  "Enter manually…" button, reserved for typing a brand-new config or
-  editing one, since applying a saved profile never needs them.
+- **DHCP / Static IPv4 toggle for Ethernet**. The DHCP/Static buttons
+  themselves are always visible; clicking "Static" is what opens the
+  fields below (saved profiles, "Enter manually…"), and clicking "Static"
+  again — or closing the popup — is what tucks them back away. If a
+  static profile is actually applied, its name stays visible right under
+  the buttons even while the fields are closed. Static mode leads with
+  your saved profiles rather than raw fields — the address/gateway/DNS
+  entry fields stay hidden behind an "Enter manually…" button, reserved
+  for typing a brand-new config or editing one, since applying a saved
+  profile never needs them.
 - **Saved static-IP profiles** — name a set of address/gateway/DNS values
   once (e.g. "Office LAN") and re-apply it later with one click (applies
   immediately — no need to open the manual-entry fields) instead of
   retyping it every time you're back on a network that needs a fixed IP.
   Stored at `~/.config/netctl/profiles.json`, separate from this repo.
-  Whichever profile matches the currently-applied config shows right in
-  the Ethernet hero (e.g. "homelab-management"), visible even with the
-  IPv4 section collapsed.
+  Whichever profile matches the currently-applied config shows right
+  under the DHCP/Static buttons (e.g. "homelab-management"), visible even
+  with the fields collapsed.
 - **Wi-Fi network scanning, joining, and forgetting** — nearby networks
   (sorted connected/known-first, then by signal), a password prompt for
   networks that need one, a lock icon for anything requiring credentials,
