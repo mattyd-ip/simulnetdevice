@@ -80,31 +80,42 @@ The built-in widget is left untouched and can be re-enabled as a fallback
 
 ## Troubleshooting
 
-- **Ethernet shows "Connected" but Gateway is blank, and losing Wi-Fi means
-  losing all network access.** This means the DHCP server on whatever the
-  cable is plugged into isn't sending a gateway (the DHCP "Router" option)
-  in Ethernet's lease — NetworkManager has nothing to build a default route
-  from, so Ethernet can only reach its own subnet, not the internet. It's a
-  router/DHCP-scope quirk (common on isolated ports, guest VLANs, or
-  reservations missing a gateway), not something netctl or NetworkManager
-  can detect automatically. Two ways to deal with it:
-  - **Static IPv4 toggle** (software-only, always available): use the same
-    address Ethernet already had, and the gateway your Wi-Fi is using on
-    the same subnet (`Gateway` in the Wi-Fi stats grid) — save it as a
-    profile so it re-applies with one click next time.
-  - **Physically unplug and replug the cable.** Switching Ethernet back to
-    DHCP from this widget (or via plain `nmcli`) already forces a genuine
-    fresh DHCP transaction, not a stale renewal — confirmed by watching
-    NetworkManager's own logs do a full new lease negotiation. But neither
-    that nor `nmcli device disconnect`/`connect` ever drops the physical
-    carrier (`/sys/class/net/<iface>/carrier` stays `1` throughout, tested
-    live) — some routers/switches only re-evaluate what to hand out on an
-    actual link-down/up, which nothing at the NetworkManager level can
-    trigger without root (`ip link set dev <iface> down`, which this setup
-    intentionally doesn't grant passwordless access to, to avoid adding a
-    new privilege-escalation surface). If DHCP keeps coming back without a
-    gateway even after switching back from Static, a physical replug is
-    the reliable way to actually reset the other end's state.
+- **Connection shows "Connected" but Gateway is blank, and you lose all
+  network access if the other interface goes down.** This means the DHCP
+  server on the router isn't sending a gateway (the DHCP "Router" option)
+  in that lease — NetworkManager has nothing to build a default route
+  from, so the interface can only reach its own subnet, not the internet.
+  It's happened on both Wi-Fi and Ethernet on the same router here, so
+  it reads as an intermittent router/DHCP-server quirk, not something
+  specific to one interface, one cable, or one switch port — and not
+  something netctl or NetworkManager can detect or fix automatically.
+  The fix differs by interface, because of a real asymmetry in what
+  NetworkManager can force without root:
+  - **Wi-Fi**: just disconnect and reconnect the network (radio off/on,
+    or reconnect from the nearby-networks list). For Wi-Fi the connection
+    state *is* the link-layer association — disconnecting genuinely
+    drops and re-establishes the 802.11 link, confirmed live in
+    NetworkManager's own log (supplicant state going
+    `internal-starting -> disconnected -> prepare` before a fresh DHCP
+    transaction). That full reset is enough to get a correct lease back.
+  - **Ethernet**: the equivalent doesn't exist in software. Switching
+    back to DHCP from this widget (or plain `nmcli`) already forces a
+    genuine fresh DHCP transaction, not a stale renewal — confirmed by
+    watching NetworkManager's logs do a full new lease negotiation. But
+    neither that nor `nmcli device disconnect`/`connect` ever drops the
+    physical carrier (`/sys/class/net/<iface>/carrier` stays `1`
+    throughout, tested live), because Ethernet's connection state and its
+    physical link are separate — unlike Wi-Fi, deactivating the profile
+    doesn't touch the cable. Some routers only re-evaluate what to hand
+    out on an actual link-down/up, which nothing at the NetworkManager
+    level can trigger without root (`ip link set dev <iface> down`, which
+    this setup intentionally doesn't grant passwordless access to, to
+    avoid adding a new privilege-escalation surface). Two options if it
+    recurs on Ethernet: the **Static IPv4 toggle** (software-only — use
+    the same address it already had, and the gateway Wi-Fi is using on
+    the same subnet, saved as a profile for one-click re-apply), or
+    **physically unplug and replug the cable**, which is the only
+    reliable way to force a real link reset on Ethernet.
 
 ## Repo layout
 
