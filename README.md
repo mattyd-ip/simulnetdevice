@@ -41,8 +41,9 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   and a forget button for saved networks. Built directly on Quickshell's
   reactive `WifiDevice`/`WifiNetwork` objects (`connect()`,
   `connectWithPsk()`, `forget()`), so there's no `nmcli` scripting involved.
-  The list shows about 5 rows at a time and scrolls for the rest, so a
-  dense area with dozens of visible networks doesn't blow out the popup.
+  The list shows about 4 rows at a time and scrolls for the rest (the
+  section header shows the total count), so a dense area with dozens of
+  visible networks doesn't blow out the popup.
 
 ## Known limitations / non-goals (for now)
 
