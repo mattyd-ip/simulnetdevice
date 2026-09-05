@@ -81,10 +81,24 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   from, so Ethernet can only reach its own subnet, not the internet. It's a
   router/DHCP-scope quirk (common on isolated ports, guest VLANs, or
   reservations missing a gateway), not something netctl or NetworkManager
-  can detect automatically. Fix it with the Static IPv4 toggle: use the
-  same address Ethernet already had, and the gateway your Wi-Fi is using
-  on the same subnet (`Gateway` in the Wi-Fi stats grid) — save it as a
-  profile so it re-applies with one click next time.
+  can detect automatically. Two ways to deal with it:
+  - **Static IPv4 toggle** (software-only, always available): use the same
+    address Ethernet already had, and the gateway your Wi-Fi is using on
+    the same subnet (`Gateway` in the Wi-Fi stats grid) — save it as a
+    profile so it re-applies with one click next time.
+  - **Physically unplug and replug the cable.** Switching Ethernet back to
+    DHCP from this widget (or via plain `nmcli`) already forces a genuine
+    fresh DHCP transaction, not a stale renewal — confirmed by watching
+    NetworkManager's own logs do a full new lease negotiation. But neither
+    that nor `nmcli device disconnect`/`connect` ever drops the physical
+    carrier (`/sys/class/net/<iface>/carrier` stays `1` throughout, tested
+    live) — some routers/switches only re-evaluate what to hand out on an
+    actual link-down/up, which nothing at the NetworkManager level can
+    trigger without root (`ip link set dev <iface> down`, which this setup
+    intentionally doesn't grant passwordless access to, to avoid adding a
+    new privilege-escalation surface). If DHCP keeps coming back without a
+    gateway even after switching back from Static, a physical replug is
+    the reliable way to actually reset the other end's state.
 
 ## Upcoming / planned
 
