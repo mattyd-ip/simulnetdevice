@@ -84,7 +84,7 @@ Item {
     spacing: Style.space(8)
 
     PanelSectionHeader {
-      text: "SAVED PROFILES"
+      text: "SAVED ETHERNET PROFILES"
       foreground: root.bar.foreground
       fontFamily: root.bar.fontFamily
     }

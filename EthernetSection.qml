@@ -142,11 +142,22 @@ Item {
     formMode = "manual"
   }
 
+  // Only ever syncs FROM the live profile INTO "manual" (to reflect a
+  // static config that's actually applied). Never forces "manual" back to
+  // "auto" on its own -- the live method stays "auto" the whole time the
+  // user is filling in a new static config (nothing is written until
+  // Apply), and this function runs on every 3s poll via onInfoChanged, so
+  // doing that used to blow away the open form and whatever the user had
+  // typed before they could hit Apply.
   function syncFormMode() {
     if (busy) return
     var manual = Model.isManualMethod(info.method)
-    if (manual && formMode !== "manual") seedStaticFields()
-    formMode = manual ? "manual" : "auto"
+    if (manual) {
+      if (formMode !== "manual") seedStaticFields()
+      formMode = "manual"
+    } else if (formMode !== "manual") {
+      formMode = "auto"
+    }
   }
 
   onInfoChanged: syncFormMode()
@@ -284,7 +295,7 @@ Item {
     onTriggered: root.refresh()
   }
 
-  onIfaceChanged: refresh()
+  onIfaceChanged: { formMode = "auto"; refresh() }
   onOpenedChanged: {
     if (opened) refresh()
     else statsGrid.reset()
@@ -410,7 +421,7 @@ Item {
       spacing: Style.space(10)
 
       PanelSectionHeader {
-        text: "IPV4 CONFIGURATION"
+        text: "ETHERNET IPV4 CONFIGURATION"
         foreground: root.bar.foreground
         fontFamily: root.bar.fontFamily
       }
