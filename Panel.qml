@@ -64,12 +64,14 @@ Panel {
     // real screenshot, not just qmllint/journalctl checks).
     readonly property real columnWidth: Style.space(380)
     readonly property real columnGap: Style.space(16)
-    // Wi-Fi and Ethernet each get their own column, side by side, when both
-    // physical adapters actually exist -- the common case on a laptop with
-    // both a Wi-Fi card and an Ethernet port. A device with only one of the
-    // two (desktop with no Wi-Fi card, say) stays a single column; there's
-    // nothing to put beside it.
-    readonly property bool twoColumn: wifiSection.hasAdapter && ethernetSection.hasAdapter
+    // Wi-Fi and Ethernet each get their own column, side by side, only while
+    // both are actually connected -- keyed on isConnected rather than mere
+    // adapter presence so switching Ethernet off (still physically present,
+    // just disconnected) drops back to a single column instead of leaving
+    // an idle column sitting there. A device with only one adapter never
+    // gets that side connected in the first place, so it naturally stays
+    // single-column too.
+    readonly property bool twoColumn: wifiSection.isConnected && ethernetSection.isConnected
 
     contentWidth: panel.fittedContentWidth(panel.twoColumn ? panel.columnWidth * 2 + panel.columnGap : panel.columnWidth)
     contentHeight: panel.fittedContentHeight(sectionsGrid.implicitHeight)
