@@ -106,6 +106,10 @@ Panel {
           // comparison against the other's actual metric, not a guess.
           primaryCompareMetric: ethernetSection.routeMetric
           onRouteMetricApplied: ethernetSection.setRouteMetric(Model.SECONDARY_METRIC)
+          // Let the nearby-networks list grow to match Ethernet's height in
+          // two-column mode -- Ethernet's own height never depends on
+          // Wi-Fi's, so this direction is safe from binding loops.
+          stretchTargetHeight: panel.twoColumn ? ethernetSection.implicitHeight : 0
         }
 
         PanelSeparator {

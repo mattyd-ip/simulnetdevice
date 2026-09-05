@@ -29,6 +29,24 @@ Item {
   // first (Model.sortWifiRows), so what's visible without scrolling is
   // always "your" networks before strangers'.
   readonly property int visibleRowCount: 4
+  // Extra pixels granted beyond the normal cap, set externally (by
+  // WifiSection) when the Ethernet column is taller so the list can grow
+  // downward to match instead of leaving blank space beside it. Never
+  // grows past what's needed to show every network -- see listRenderHeight.
+  property real extraHeight: 0
+  readonly property real listSpacing: Style.space(8)
+  readonly property real listRowEstimate: Style.font.bodySmall + Style.font.caption + Style.space(1) + listSpacing
+  // "Natural" cap -- deliberately independent of extraHeight/listRenderHeight
+  // so WifiSection can read this to compute how much stretch room is left
+  // over without creating a binding loop through the actual rendered height.
+  readonly property real listNaturalHeight: Math.min(networkListView.contentHeight, listRowEstimate * visibleRowCount - listSpacing)
+  readonly property real listRenderHeight: Math.min(networkListView.contentHeight, listNaturalHeight + extraHeight)
+  // What this component would take up with no stretch applied -- used by
+  // WifiSection to size itself without depending on the (possibly
+  // stretched) actual height, which would be circular.
+  readonly property real unstretchedImplicitHeight: wifiNetworks.length === 0
+    ? sectionHeaderItem.implicitHeight + column.spacing + emptyStateText.implicitHeight
+    : sectionHeaderItem.implicitHeight + column.spacing + listNaturalHeight
 
   // Per-row in-flight state, same shape as the built-in widget's: at most
   // one action in flight at a time, tracked by SSID so a row can render
@@ -222,6 +240,7 @@ Item {
     spacing: Style.space(8)
 
     PanelSectionHeader {
+      id: sectionHeaderItem
       text: {
         if (root.device && root.device.scannerEnabled && root.wifiNetworks.length === 0) return "NEARBY NETWORKS (SCANNING…)"
         if (root.wifiNetworks.length > root.visibleRowCount) return "NEARBY NETWORKS (" + root.wifiNetworks.length + ")"
@@ -232,6 +251,7 @@ Item {
     }
 
     Text {
+      id: emptyStateText
       textFormat: Text.PlainText
       visible: root.wifiNetworks.length === 0
       text: root.device ? "Scanning for networks…" : "No Wi-Fi adapter."
@@ -247,12 +267,11 @@ Item {
     ListView {
       id: networkListView
       width: parent.width
-      // Row height plus the ListView's own inter-row spacing, so the count
-      // in visibleRowCount lines up with what actually renders instead of
-      // the previous estimate, which ran long and showed a row extra.
-      readonly property real rowEstimate: Style.font.bodySmall + Style.font.caption + Style.space(1) + spacing
-      height: Math.min(contentHeight, rowEstimate * root.visibleRowCount - spacing)
-      spacing: Style.space(8)
+      // listRenderHeight = the normal ~visibleRowCount-row cap, plus
+      // whatever extraHeight WifiSection has granted to match the Ethernet
+      // column's height -- never more than contentHeight (all rows shown).
+      height: root.listRenderHeight
+      spacing: root.listSpacing
       clip: true
       boundsBehavior: Flickable.StopAtBounds
       interactive: contentHeight > height

@@ -159,6 +159,7 @@ Item {
 
     // ---------- Hero: icon · name + status · primary/power ----------
     Item {
+      id: heroItem
       width: parent.width
       implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, heroActions.implicitHeight)
 
@@ -246,6 +247,7 @@ Item {
 
     // ---------- Live stats ----------
     PanelSeparator {
+      id: statsSeparator
       visible: root.isConnected
       foreground: root.bar.foreground
     }
@@ -260,6 +262,7 @@ Item {
 
     // ---------- Nearby networks ----------
     PanelSeparator {
+      id: networksSeparator
       foreground: root.bar.foreground
     }
 
@@ -269,8 +272,27 @@ Item {
       bar: root.bar
       device: root.wifiDevice
       active: root.opened
+      extraHeight: root.extraForList
     }
   }
+
+  // Set externally (by Panel.qml, in two-column mode) to the Ethernet
+  // column's height, so the nearby-networks list can grow downward to
+  // match instead of leaving blank space beside a taller Ethernet side.
+  property real stretchTargetHeight: 0
+
+  // Everything except the (possibly stretched) network list, computed
+  // independently of scanList's actual rendered height -- reading
+  // column.implicitHeight here instead would create a binding loop, since
+  // that already includes whatever height extraForList gives the list.
+  readonly property real naturalHeight:
+    heroItem.implicitHeight + column.spacing
+    + (root.isConnected ? statsSeparator.implicitHeight + column.spacing : 0)
+    + (root.isConnected ? statsGrid.implicitHeight + column.spacing : 0)
+    + networksSeparator.implicitHeight + column.spacing
+    + scanList.unstretchedImplicitHeight
+
+  readonly property real extraForList: Math.max(0, stretchTargetHeight - naturalHeight)
 
   // Exposed so Panel.qml's PanelKeyCatcher can block h/j/k/l-as-navigation
   // while a network's password field is focused.
