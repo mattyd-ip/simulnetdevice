@@ -99,6 +99,39 @@ function normalizeDns(text) {
   return parts.join(",")
 }
 
+// Fixed pair of route metrics used by the "Set as primary" control: the
+// primary interface gets the low value, the other gets the high one. Both
+// well below NetworkManager's own automatic values (100/600 wired/wifi
+// defaults, ~20000+ when it penalizes an interface with unconfirmed
+// connectivity), so an explicit choice always wins over the automatic one.
+var PRIMARY_METRIC = 100
+var SECONDARY_METRIC = 600
+
+// A connection is "primary" once its metric is the lower of the two --
+// compare against the actual sibling metric, not a hardcoded threshold,
+// since NetworkManager's own penalty can push either well above 600.
+function isPrimary(ownMetric, otherMetric) {
+  var own = parseInt(ownMetric, 10)
+  var other = parseInt(otherMetric, 10)
+  if (!isFinite(own)) return false
+  if (!isFinite(other)) return true
+  return own < other
+}
+
+function validateProfileName(name) {
+  var trimmed = String(name || "").trim()
+  return trimmed.length > 0 && trimmed.length <= 40
+}
+
+// One-line summary for a saved profile row, e.g. "192.168.1.50/24 -> 192.168.1.1".
+function profileSummary(profile) {
+  var value = profile || {}
+  var address = value.address || ""
+  if (address === "") return "No address set"
+  var gateway = value.gateway || ""
+  return gateway === "" ? address : address + " → " + gateway
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     parseKeyValue: parseKeyValue,
@@ -111,6 +144,11 @@ if (typeof module !== "undefined") {
     isValidCidr: isValidCidr,
     isValidIpv4: isValidIpv4,
     canApplyStatic: canApplyStatic,
-    normalizeDns: normalizeDns
+    normalizeDns: normalizeDns,
+    PRIMARY_METRIC: PRIMARY_METRIC,
+    SECONDARY_METRIC: SECONDARY_METRIC,
+    isPrimary: isPrimary,
+    validateProfileName: validateProfileName,
+    profileSummary: profileSummary
   }
 }
