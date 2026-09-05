@@ -263,6 +263,24 @@ function profileSummary(profile) {
   return gateway === "" ? address : address + " → " + gateway
 }
 
+// Tolerant load: a missing/corrupt file yields an empty list rather than
+// throwing, since this reads straight from FileView.text() at startup.
+function loadProfiles(text) {
+  var raw = String(text || "").trim()
+  if (raw === "") return []
+  try {
+    var parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(function(p) { return p && typeof p.name === "string" })
+  } catch (e) {
+    return []
+  }
+}
+
+function serializeProfiles(profiles) {
+  return JSON.stringify(Array.isArray(profiles) ? profiles : [], null, 2)
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     parseKeyValue: parseKeyValue,
@@ -290,6 +308,8 @@ if (typeof module !== "undefined") {
     SECONDARY_METRIC: SECONDARY_METRIC,
     isPrimary: isPrimary,
     validateProfileName: validateProfileName,
-    profileSummary: profileSummary
+    profileSummary: profileSummary,
+    loadProfiles: loadProfiles,
+    serializeProfiles: serializeProfiles
   }
 }

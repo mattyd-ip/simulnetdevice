@@ -474,7 +474,21 @@ Item {
         Column {
           id: staticForm
           width: parent.width
-          spacing: Style.space(6)
+          spacing: Style.space(10)
+
+          ProfileList {
+            id: profileList
+            width: parent.width
+            bar: root.bar
+            currentAddress: root.addressField
+            currentGateway: root.gatewayField
+            currentDns: root.dnsField
+            onApplyRequested: function(profile) { root.applyProfileToForm(profile) }
+          }
+
+          PanelSeparator {
+            foreground: root.bar.foreground
+          }
 
           TextField {
             id: addressInput
@@ -539,5 +553,5 @@ Item {
 
   // Static-IP text fields own their own keys while focused -- used by
   // Panel.qml's PanelKeyCatcher.blocked so h/j/k/l and space type normally.
-  readonly property bool anyFieldFocused: addressInput.activeFocus || gatewayInput.activeFocus || dnsInput.activeFocus
+  readonly property bool anyFieldFocused: addressInput.activeFocus || gatewayInput.activeFocus || dnsInput.activeFocus || profileList.anyFieldFocused
 }
