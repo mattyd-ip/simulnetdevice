@@ -224,7 +224,7 @@ Item {
     PanelSectionHeader {
       text: {
         if (root.device && root.device.scannerEnabled && root.wifiNetworks.length === 0) return "NEARBY NETWORKS (SCANNING…)"
-        if (root.wifiNetworks.length > root.visibleRowCount) return "NEARBY NETWORKS (" + root.wifiNetworks.length + " · SCROLL FOR MORE)"
+        if (root.wifiNetworks.length > root.visibleRowCount) return "NEARBY NETWORKS (" + root.wifiNetworks.length + ")"
         return "NEARBY NETWORKS"
       }
       foreground: root.bar.foreground
