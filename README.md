@@ -35,13 +35,23 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   once (e.g. "Office LAN") and re-apply it later instead of retyping it
   every time you're back on a network that needs a fixed IP. Stored at
   `~/.config/netctl/profiles.json`, separate from this repo.
+- **Wi-Fi network scanning, joining, and forgetting** — nearby networks
+  (sorted connected/known-first, then by signal), a password prompt for
+  networks that need one, a lock icon for anything requiring credentials,
+  and a forget button for saved networks. Built directly on Quickshell's
+  reactive `WifiDevice`/`WifiNetwork` objects (`connect()`,
+  `connectWithPsk()`, `forget()`), so there's no `nmcli` scripting involved.
+  The list shows about 5 rows at a time and scrolls for the rest, so a
+  dense area with dozens of visible networks doesn't blow out the popup.
 
 ## Known limitations / non-goals (for now)
 
-- **No Wi-Fi network scanning or joining a new SSID.** netctl manages the
-  Wi-Fi connection NetworkManager already has (status, disconnect, primary
-  route), not discovering nearby networks. Use the built-in
-  `omarchy.network` widget (re-enable it) if you need to join a new network.
+- **No WPA-Enterprise (802.1x) networks.** Scanning/joining covers
+  WPA2/WPA3-Personal, WEP, and open/OWE networks. Enterprise networks (the
+  kind that ask for an identity + password, common on corporate/campus
+  Wi-Fi) still need the built-in `omarchy.network` widget.
+- **No Wi-Fi band selection or QR-code sharing.** Both stay the built-in
+  widget's job for now.
 - **IPv4 only.** No IPv6 configuration.
 - **Static-IP profiles are Ethernet-only right now**, though the data model
   doesn't assume that — extending the picker to Wi-Fi later is
@@ -57,9 +67,6 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   uses), and a persistent privileged process whose streaming output gets
   parsed incrementally in QML. This will be its own follow-up plan rather
   than bolted onto the current one.
-- **Possibly porting Wi-Fi scan/join UI** (nearby networks, password
-  prompts, forget network) into netctl, if the built-in widget stops being
-  needed for that. Not started — no firm decision yet.
 
 ## Repo layout
 
@@ -71,6 +78,7 @@ The built-in widget is left untouched and can be re-enabled as a fallback
 | `EthernetSection.qml` | Ethernet status, connect/disconnect, DHCP/Static form, primary-route control |
 | `StatsGrid.qml` | Shared per-interface ping/throughput/IP/gateway grid |
 | `ProfileList.qml` | Saved static-IP profiles UI + JSON persistence |
+| `WifiScanList.qml` | Nearby-network scan list, join/password prompt, forget |
 | `Model.js` | Pure parsing/formatting/validation helpers (testable under plain `node`) |
 | `docs/plans/` | Implementation plan(s) |
 
