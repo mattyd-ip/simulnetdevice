@@ -22,8 +22,9 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   same time: connection state, SSID/link speed, IP address, gateway, ping,
   packet loss, and download/upload rate + totals — tracked separately per
   interface, not shared from one default-route sample. They lay out as two
-  side-by-side columns when the device actually has both a Wi-Fi and an
-  Ethernet adapter, or a single column when it only has one.
+  side-by-side columns while both are actually connected, dropping back to
+  a single stacked column the moment either one isn't (so an idle,
+  disconnected side doesn't keep holding onto half the popup).
 - **Set primary** — pins `ipv4.route-metric` on whichever interface should
   own outbound/default-route traffic and reactivates it, so you choose which
   network wins instead of NetworkManager's built-in wired-beats-wireless
