@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "netctl",
+  "name": "Net Control",
+  "version": "0.1.0",
+  "author": "sweetshub",
+  "license": "MIT",
+  "description": "Manage Wi-Fi and Ethernet independently at the same time: live per-interface status, connect/disconnect, primary-route selection, and DHCP/static IP profiles.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Net Control",
+    "description": "Independent Wi-Fi and Ethernet status/control, unlike the built-in Network widget which only reports the default-route interface.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 3
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 3
+      }
+    ]
+  }
+}
