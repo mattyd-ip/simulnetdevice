@@ -72,6 +72,20 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   doesn't assume that — extending the picker to Wi-Fi later is
   straightforward.
 
+## Troubleshooting
+
+- **Ethernet shows "Connected" but Gateway is blank, and losing Wi-Fi means
+  losing all network access.** This means the DHCP server on whatever the
+  cable is plugged into isn't sending a gateway (the DHCP "Router" option)
+  in Ethernet's lease — NetworkManager has nothing to build a default route
+  from, so Ethernet can only reach its own subnet, not the internet. It's a
+  router/DHCP-scope quirk (common on isolated ports, guest VLANs, or
+  reservations missing a gateway), not something netctl or NetworkManager
+  can detect automatically. Fix it with the Static IPv4 toggle: use the
+  same address Ethernet already had, and the gateway your Wi-Fi is using
+  on the same subnet (`Gateway` in the Wi-Fi stats grid) — save it as a
+  profile so it re-applies with one click next time.
+
 ## Upcoming / planned
 
 - **Per-process bandwidth monitoring.** Deliberately deferred out of the
