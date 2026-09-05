@@ -227,6 +227,11 @@ Item {
     onExited: function(exitCode) {
       if (exitCode !== 0) {
         root.lastError = String(actionStderr.text || actionStdout.text || "Command failed").trim()
+      } else if (root.pendingAction === "apply-static") {
+        // A successful manual apply is done with the raw fields -- collapse
+        // them back like a saved-profile apply never needed to open them.
+        // Left open on failure so the values are still there to fix and retry.
+        root.manualEntryOpen = false
       }
       root.pendingAction = ""
       root.refresh()
