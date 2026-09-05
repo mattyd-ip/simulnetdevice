@@ -249,6 +249,73 @@ function isPrimary(ownMetric, otherMetric) {
   return own < other
 }
 
+// ---- Wi-Fi scanning (nearby networks) ----
+// Ported logic (not code) from the built-in omarchy.network widget's
+// Model.js -- same shape, reimplemented against this plugin's own state.
+
+// Primitives only: rows become list-model data, so a WifiNetwork QObject
+// wrapper never ends up in a delegate's var property (NetworkManager scan
+// churn can destroy the object while a delegate is still incubating).
+function wifiRow(network) {
+  if (!network) return null
+  return {
+    connected: !!network.connected,
+    known: !!network.known,
+    ssid: network.name || "",
+    signal: Math.round((network.signalStrength || 0) * 100),
+    security: network.security
+  }
+}
+
+function sortWifiRows(rows) {
+  var nets = Array.isArray(rows) ? rows.slice() : []
+  nets.sort(function(a, b) {
+    if (a.connected !== b.connected) return a.connected ? -1 : 1
+    if (a.known !== b.known) return a.known ? -1 : 1
+    return b.signal - a.signal
+  })
+  return nets
+}
+
+function wifiSectionTitle(wifiNetworks, index) {
+  var networks = Array.isArray(wifiNetworks) ? wifiNetworks : []
+  if (index < 0 || index >= networks.length) return ""
+  var net = networks[index]
+  if (!net) return ""
+  if (net.known && index === 0) return "KNOWN NETWORKS"
+  if (!net.known && (index === 0 || (networks[index - 1] && networks[index - 1].known))) return "OTHER NETWORKS"
+  return ""
+}
+
+// OWE (Enhanced Open) encrypts without authenticating, so it has no
+// credentials to collect -- it should neither show a lock nor open a prompt.
+function requiresCredentials(security, openSecurity, oweSecurity) {
+  return security !== openSecurity && security !== oweSecurity
+}
+
+function canForgetNetwork(network) {
+  return !!(network && network.known && !network.connected)
+}
+
+function networkFailureReason(reason, needsCredentials, reasons) {
+  var r = reasons || {}
+  if (needsCredentials && reason === r.NoSecrets) return "Passphrase required"
+  if (needsCredentials && reason === r.WifiAuthTimeout) return "Wrong password"
+  if (reason === r.WifiNetworkLost) return "Network lost"
+  if (reason === r.WifiClientDisconnected) return "Disconnected"
+  if (reason === r.WifiClientFailed) return "Connection failed"
+  return "Failed to connect"
+}
+
+// Whether a failed connect should reopen the passphrase prompt -- only when
+// the failure is plausibly a missing/wrong saved PSK on a network that
+// actually needs one. connectWithPsk() overwrites the stored PSK on submit.
+function shouldRepromptPassphrase(reason, needsCredentials, reasons) {
+  var r = reasons || {}
+  if (!needsCredentials) return false
+  return reason === r.NoSecrets || reason === r.WifiAuthTimeout
+}
+
 function validateProfileName(name) {
   var trimmed = String(name || "").trim()
   return trimmed.length > 0 && trimmed.length <= 40
@@ -307,6 +374,13 @@ if (typeof module !== "undefined") {
     PRIMARY_METRIC: PRIMARY_METRIC,
     SECONDARY_METRIC: SECONDARY_METRIC,
     isPrimary: isPrimary,
+    wifiRow: wifiRow,
+    sortWifiRows: sortWifiRows,
+    wifiSectionTitle: wifiSectionTitle,
+    requiresCredentials: requiresCredentials,
+    canForgetNetwork: canForgetNetwork,
+    networkFailureReason: networkFailureReason,
+    shouldRepromptPassphrase: shouldRepromptPassphrase,
     validateProfileName: validateProfileName,
     profileSummary: profileSummary,
     loadProfiles: loadProfiles,

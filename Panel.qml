@@ -67,9 +67,9 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      // Static-IP text fields own their own keys while focused -- h/j/k/l
-      // and space are ordinary characters there.
-      blocked: ethernetSection.anyFieldFocused
+      // Static-IP and Wi-Fi-password text fields own their own keys while
+      // focused -- h/j/k/l and space are ordinary characters there.
+      blocked: ethernetSection.anyFieldFocused || wifiSection.anyFieldFocused
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 

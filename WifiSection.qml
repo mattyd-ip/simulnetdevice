@@ -7,10 +7,10 @@ import qs.Ui
 import qs.Commons
 import "Model.js" as Model
 
-// Wi-Fi status + radio on/off + primary-route selection, scoped directly to
-// the Wi-Fi interface rather than the default route -- same reasoning as
-// EthernetSection.qml. Does NOT include nearby-network scanning, joining a
-// new SSID, password prompts, or band selection: those stay the built-in
+// Wi-Fi status + radio on/off + primary-route selection + nearby-network
+// scanning/joining/forgetting, scoped directly to the Wi-Fi interface rather
+// than the default route -- same reasoning as EthernetSection.qml. Band
+// selection and WPA-Enterprise (802.1x) networks stay the built-in
 // omarchy.network widget's job for now (see docs/plans -- Non-goals).
 Item {
   id: root
@@ -257,5 +257,22 @@ Item {
       info: root.info
       visibleGrid: root.isConnected
     }
+
+    // ---------- Nearby networks ----------
+    PanelSeparator {
+      foreground: root.bar.foreground
+    }
+
+    WifiScanList {
+      id: scanList
+      width: parent.width
+      bar: root.bar
+      device: root.wifiDevice
+      active: root.opened
+    }
   }
+
+  // Exposed so Panel.qml's PanelKeyCatcher can block h/j/k/l-as-navigation
+  // while a network's password field is focused.
+  readonly property bool anyFieldFocused: scanList.anyFieldFocused
 }
