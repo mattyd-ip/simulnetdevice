@@ -28,7 +28,7 @@ Item {
   // the whole popup taller. Sorting already puts connected/known networks
   // first (Model.sortWifiRows), so what's visible without scrolling is
   // always "your" networks before strangers'.
-  readonly property int visibleRowCount: 5
+  readonly property int visibleRowCount: 4
 
   // Per-row in-flight state, same shape as the built-in widget's: at most
   // one action in flight at a time, tracked by SSID so a row can render
@@ -72,7 +72,15 @@ Item {
 
   Component.onDestruction: if (scannerDevice) scannerDevice.scannerEnabled = false
 
-  onActiveChanged: setScannerEnabled(active)
+  onActiveChanged: {
+    setScannerEnabled(active)
+    // The ListView is a single long-lived instance (this component doesn't
+    // get destroyed between popup opens), so its scroll position would
+    // otherwise carry over from last time -- reopening should always start
+    // back at the top (your connected/known networks), not wherever it was
+    // last scrolled to.
+    if (active) Qt.callLater(function() { networkListView.positionViewAtBeginning() })
+  }
   onDeviceChanged: setScannerEnabled(root.active)
   onNetworkObjectsChanged: syncWifiNetworks()
 
@@ -239,8 +247,11 @@ Item {
     ListView {
       id: networkListView
       width: parent.width
-      readonly property real rowEstimate: Style.font.bodySmall + Style.font.caption + Style.space(6) + Style.space(12)
-      height: Math.min(contentHeight, rowEstimate * root.visibleRowCount)
+      // Row height plus the ListView's own inter-row spacing, so the count
+      // in visibleRowCount lines up with what actually renders instead of
+      // the previous estimate, which ran long and showed a row extra.
+      readonly property real rowEstimate: Style.font.bodySmall + Style.font.caption + Style.space(1) + spacing
+      height: Math.min(contentHeight, rowEstimate * root.visibleRowCount - spacing)
       spacing: Style.space(8)
       clip: true
       boundsBehavior: Flickable.StopAtBounds
