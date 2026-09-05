@@ -57,12 +57,22 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
+
     // 380, not 340: matches the built-in network widget's popup width, which
     // is the proven-good fit for this same 4-column stats grid -- a narrower
     // popup let the "IP Address" label collide with its value (caught via a
     // real screenshot, not just qmllint/journalctl checks).
-    contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    readonly property real columnWidth: Style.space(380)
+    readonly property real columnGap: Style.space(16)
+    // Wi-Fi and Ethernet each get their own column, side by side, when both
+    // physical adapters actually exist -- the common case on a laptop with
+    // both a Wi-Fi card and an Ethernet port. A device with only one of the
+    // two (desktop with no Wi-Fi card, say) stays a single column; there's
+    // nothing to put beside it.
+    readonly property bool twoColumn: wifiSection.hasAdapter && ethernetSection.hasAdapter
+
+    contentWidth: panel.fittedContentWidth(panel.twoColumn ? panel.columnWidth * 2 + panel.columnGap : panel.columnWidth)
+    contentHeight: panel.fittedContentHeight(sectionsGrid.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -73,16 +83,23 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
-      Column {
-        id: column
+      // A Grid, not a Column: switching `columns` between 1 and 2 gives us
+      // the single-stack and side-by-side layouts from the same two section
+      // instances, with no duplication or manual reparenting. Positioners
+      // skip invisible children entirely, so the separator below drops out
+      // of the flow on its own in two-column mode instead of leaving a gap.
+      Grid {
+        id: sectionsGrid
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        spacing: Style.space(16)
+        columns: panel.twoColumn ? 2 : 1
+        columnSpacing: panel.columnGap
+        rowSpacing: Style.space(16)
 
         WifiSection {
           id: wifiSection
-          width: parent.width
+          width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
           bar: root.bar
           opened: root.opened
           // Cross-wired so each section's "Set primary" reflects the real
@@ -92,12 +109,14 @@ Panel {
         }
 
         PanelSeparator {
+          visible: !panel.twoColumn
+          width: sectionsGrid.width
           foreground: root.bar.foreground
         }
 
         EthernetSection {
           id: ethernetSection
-          width: parent.width
+          width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
           bar: root.bar
           opened: root.opened
           primaryCompareMetric: wifiSection.routeMetric
