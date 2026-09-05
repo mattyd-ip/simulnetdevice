@@ -99,6 +99,113 @@ function normalizeDns(text) {
   return parts.join(",")
 }
 
+// ---- Throughput + ping stats (per interface) ----
+// Ported from the built-in omarchy.network widget's Model.js -- same pure
+// logic, duplicated rather than imported since that plugin stays untouched
+// and this one owns its own copy per interface (two independent instances,
+// one per StatsGrid, rather than one shared default-route sample).
+
+function throughputState(previous, next, now) {
+  var prev = previous || {}
+  var sample = next || {}
+  var iface = sample.iface || ""
+  var rx = parseFloat(sample.rx_bytes || "0")
+  var tx = parseFloat(sample.tx_bytes || "0")
+  var previousTime = Number(prev.prevSampleTime || 0)
+
+  if (iface !== (prev.prevIface || "") || previousTime === 0) {
+    return { prevIface: iface, prevRxBytes: rx, prevTxBytes: tx, prevSampleTime: now, downloadRate: 0, uploadRate: 0 }
+  }
+
+  var downloadRate = Number(prev.downloadRate || 0)
+  var uploadRate = Number(prev.uploadRate || 0)
+  var dt = now - previousTime
+  if (dt > 0) {
+    downloadRate = Math.max(0, (rx - Number(prev.prevRxBytes || 0)) / dt)
+    uploadRate = Math.max(0, (tx - Number(prev.prevTxBytes || 0)) / dt)
+  }
+
+  return { prevIface: iface, prevRxBytes: rx, prevTxBytes: tx, prevSampleTime: now, downloadRate: downloadRate, uploadRate: uploadRate }
+}
+
+function pingSampleValue(raw) {
+  var value = parseFloat(raw)
+  if (!isFinite(value) || value < 0) return null
+  return value
+}
+
+function appendPingSample(samples, raw, limit) {
+  var values = Array.isArray(samples) ? samples.slice() : []
+  values.push(pingSampleValue(raw))
+  while (values.length > limit) values.shift()
+  return values
+}
+
+function averagePingLatency(samples, limit) {
+  var values = Array.isArray(samples) ? samples : []
+  var sampleLimit = Math.max(1, parseInt(limit, 10) || values.length || 1)
+  var total = 0
+  var count = 0
+  for (var i = Math.max(0, values.length - sampleLimit); i < values.length; i++) {
+    var value = values[i]
+    if (typeof value !== "number" || !isFinite(value) || value < 0) continue
+    total += value
+    count++
+  }
+  return count > 0 ? total / count : -1
+}
+
+function pingPacketLossPercent(samples) {
+  var values = Array.isArray(samples) ? samples : []
+  if (values.length === 0) return 0
+  var lost = 0
+  for (var i = 0; i < values.length; i++) if (values[i] === null) lost++
+  return Math.round((lost / values.length) * 100)
+}
+
+function pingLatencyState(previous, next, limit, averageLimit) {
+  var prev = previous || {}
+  var sample = next || {}
+  var window = Math.max(1, parseInt(limit, 10) || 5)
+  var averageWindow = Math.max(1, parseInt(averageLimit, 10) || window)
+  var internetSamples = prev.internetPingSamples
+
+  internetSamples = sample.internet_ping_ms === undefined ? [] : appendPingSample(internetSamples, sample.internet_ping_ms, window)
+
+  return {
+    internetPingSamples: internetSamples,
+    internetPingLatency: averagePingLatency(internetSamples, averageWindow),
+    internetPingPacketLoss: pingPacketLossPercent(internetSamples)
+  }
+}
+
+function formatBytes(bytes) {
+  var n = Number(bytes)
+  if (!isFinite(n) || n < 0) n = 0
+  if (n < 1024) return Math.round(n) + " B"
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB"
+  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MB"
+  return (n / (1024 * 1024 * 1024)).toFixed(2) + " GB"
+}
+
+function formatRate(bytesPerSec) {
+  return formatBytes(bytesPerSec) + "/s"
+}
+
+function formatPingLatency(ms, hasSamples) {
+  if (hasSamples === false) return "--"
+  var value = parseFloat(ms)
+  if (!isFinite(value) || value < 0) return "Timeout"
+  return value.toFixed(value > 0 && value < 10 ? 1 : 0) + " ms"
+}
+
+function formatPacketLoss(percent, hasSamples) {
+  if (hasSamples === false) return "--"
+  var value = parseInt(percent, 10)
+  if (!value || value < 0) return "0%"
+  return value + "%"
+}
+
 // Fixed pair of route metrics used by the "Set as primary" control: the
 // primary interface gets the low value, the other gets the high one. Both
 // well below NetworkManager's own automatic values (100/600 wired/wifi
@@ -145,6 +252,13 @@ if (typeof module !== "undefined") {
     isValidIpv4: isValidIpv4,
     canApplyStatic: canApplyStatic,
     normalizeDns: normalizeDns,
+    throughputState: throughputState,
+    pingLatencyState: pingLatencyState,
+    pingPacketLossPercent: pingPacketLossPercent,
+    formatBytes: formatBytes,
+    formatRate: formatRate,
+    formatPingLatency: formatPingLatency,
+    formatPacketLoss: formatPacketLoss,
     PRIMARY_METRIC: PRIMARY_METRIC,
     SECONDARY_METRIC: SECONDARY_METRIC,
     isPrimary: isPrimary,
