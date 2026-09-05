@@ -49,6 +49,20 @@ Item {
   readonly property string statusLine: Model.statusText(linkState)
   readonly property string speedLabel: Model.formatSpeed(info.speed)
 
+  // Which saved profile (if any) matches the currently-applied static
+  // config, surfaced in the hero so it's visible without expanding the
+  // IPv4 section at all.
+  function findCurrentProfileName() {
+    if (formMode !== "manual") return ""
+    var profiles = profileList.profiles || []
+    for (var i = 0; i < profiles.length; i++) {
+      var p = profiles[i]
+      if (p && (p.address || "") === addressField && (p.gateway || "") === gatewayField) return p.name || ""
+    }
+    return ""
+  }
+  readonly property string currentProfileName: findCurrentProfileName()
+
   readonly property string icon: "󰈀"
   readonly property real iconOpacity: {
     if (linkState === "connected") return 1.0
@@ -408,6 +422,16 @@ Item {
           font.pixelSize: Style.font.caption
           font.bold: true
           font.letterSpacing: 1.2
+          elide: Text.ElideRight
+          width: parent.width
+        }
+        Text {
+          textFormat: Text.PlainText
+          visible: root.currentProfileName !== ""
+          text: root.currentProfileName
+          color: Qt.darker(root.bar.foreground, 1.2)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
           elide: Text.ElideRight
           width: parent.width
         }

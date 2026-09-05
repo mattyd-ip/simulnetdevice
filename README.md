@@ -21,20 +21,29 @@ The built-in widget is left untouched and can be re-enabled as a fallback
 - **Independent Wi-Fi + Ethernet sections**, each showing live status at the
   same time: connection state, SSID/link speed, IP address, gateway, ping,
   packet loss, and download/upload rate + totals — tracked separately per
-  interface, not shared from one default-route sample.
+  interface, not shared from one default-route sample. They lay out as two
+  side-by-side columns when the device actually has both a Wi-Fi and an
+  Ethernet adapter, or a single column when it only has one.
 - **Set primary** — pins `ipv4.route-metric` on whichever interface should
   own outbound/default-route traffic and reactivates it, so you choose which
   network wins instead of NetworkManager's built-in wired-beats-wireless
   default.
 - **Wi-Fi radio on/off** toggle.
 - **Ethernet connect/disconnect** toggle.
-- **DHCP / Static IPv4 toggle for Ethernet**, with an inline form
-  (address/prefix, gateway, DNS) that pre-fills from the current DHCP lease
-  when you switch to Static, so "freeze the IP I already have" is one click.
+- **DHCP / Static IPv4 toggle for Ethernet**, tucked behind a collapsible
+  "Ethernet IPv4 Configuration" section that stays closed until you need
+  it. Static mode leads with your saved profiles (below) rather than raw
+  fields — the address/gateway/DNS entry fields stay hidden behind an
+  "Enter manually…" button, reserved for typing a brand-new config or
+  editing one, since applying a saved profile never needs them.
 - **Saved static-IP profiles** — name a set of address/gateway/DNS values
-  once (e.g. "Office LAN") and re-apply it later instead of retyping it
-  every time you're back on a network that needs a fixed IP. Stored at
-  `~/.config/netctl/profiles.json`, separate from this repo.
+  once (e.g. "Office LAN") and re-apply it later with one click (applies
+  immediately — no need to open the manual-entry fields) instead of
+  retyping it every time you're back on a network that needs a fixed IP.
+  Stored at `~/.config/netctl/profiles.json`, separate from this repo.
+  Whichever profile matches the currently-applied config shows right in
+  the Ethernet hero (e.g. "homelab-management"), visible even with the
+  IPv4 section collapsed.
 - **Wi-Fi network scanning, joining, and forgetting** — nearby networks
   (sorted connected/known-first, then by signal), a password prompt for
   networks that need one, a lock icon for anything requiring credentials,
