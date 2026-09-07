@@ -61,16 +61,43 @@ Item {
 
   function setRouteMetric(metric) {
     if (!hasProfile) return
+    // See EthernetSection's identical comment: hasProfile stays true even
+    // while disconnected (fallback profile-name lookup), so without this
+    // guard the sibling's demote-to-secondary cross-wire would force
+    // `connection up` here and silently re-enable an interface the user
+    // just explicitly disabled.
+    if (!isConnected) return
+    var promoting = metric === Model.PRIMARY_METRIC
+    // Skip the actual round-trip when nothing would actually change --
+    // `connection up` forces a real Wi-Fi disconnect/reconnect (confirmed
+    // live), which every unrelated "Set primary" click on Ethernet would
+    // otherwise trigger here for no reason. But a genuine "make me primary"
+    // click still has to tell the sibling to demote even when *my* metric
+    // already happens to be right -- see EthernetSection's identical
+    // comment (two connections tied at the same metric could otherwise
+    // never be untied).
+    if (parseInt(metric, 10) === routeMetric) {
+      if (promoting) root.routeMetricApplied()
+      return
+    }
     metricProc.command = ["bash", "-c", setMetricScript, "wifi-metric", info.connection, String(metric)]
+    // Only a genuine promotion to primary should tell the sibling to
+    // demote itself -- if the demotion call below also emitted this, the
+    // sibling's own demote-in-response would bounce right back and demote
+    // us too, forever, both settling on SECONDARY_METRIC no matter which
+    // side was actually clicked (confirmed live: both connections' saved
+    // profiles converge on 600).
+    metricProc.promoting = promoting
     metricProc.running = true
   }
   signal routeMetricApplied()
 
   Process {
     id: metricProc
+    property bool promoting: false
     onExited: function(exitCode) {
       root.refresh()
-      root.routeMetricApplied()
+      if (promoting) root.routeMetricApplied()
     }
   }
 
@@ -86,6 +113,45 @@ Item {
   function toggleRadio() {
     Networking.wifiEnabled = !Networking.wifiEnabled
     Qt.callLater(function() { root.refresh() })
+  }
+
+  // Confirmed live: a real network-side condition (not something this
+  // plugin's own ping check imagines) can leave Wi-Fi passing ARP but
+  // dropping everything else indefinitely -- it does NOT clear on its own
+  // no matter how long you wait, only a genuine radio off/on (a real
+  // 802.11 disassociate + reassociate, same as the manual "Turn Wi-Fi off"
+  // toggle) restores it. `recovering` both drives the button text and,
+  // more importantly, blocks re-triggering every single poll while still
+  // stuck -- and `recoveryCooldownTimer` blocks re-triggering right after
+  // a recovery attempt too, so a case this doesn't actually fix can't turn
+  // into a radio flapping on and off every ~15s forever.
+  property bool recovering: false
+  property bool recoveryOnCooldown: false
+  function recoverConnection() {
+    if (recovering || recoveryOnCooldown || !isConnected) return
+    recovering = true
+    Networking.wifiEnabled = false
+    recoveryToggleTimer.start()
+  }
+
+  Timer {
+    id: recoveryToggleTimer
+    interval: 1500
+    repeat: false
+    onTriggered: {
+      Networking.wifiEnabled = true
+      root.recovering = false
+      root.recoveryOnCooldown = true
+      recoveryCooldownTimer.start()
+      Qt.callLater(function() { root.refresh() })
+    }
+  }
+
+  Timer {
+    id: recoveryCooldownTimer
+    interval: 30000
+    repeat: false
+    onTriggered: root.recoveryOnCooldown = false
   }
 
   readonly property string statusScript:
@@ -115,7 +181,10 @@ Item {
     "if [[ -r /sys/class/net/$iface/statistics/rx_bytes ]]; then printf 'rx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/rx_bytes)\"; fi\n" +
     "if [[ -r /sys/class/net/$iface/statistics/tx_bytes ]]; then printf 'tx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/tx_bytes)\"; fi\n" +
     "if [[ $do_ping == 1 ]]; then\n" +
-    "  ms=$(LC_ALL=C ping -n -c1 -W1 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
+    // See EthernetSection's identical comment: -I $iface keeps this row's
+    // reading scoped to this interface, not whichever one owns the default
+    // route right now.
+    "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
     "  printf 'internet_ping_ms\\t%s\\n' \"${ms:-}\"\n" +
     "fi\n" +
     "if [[ -n $conn ]]; then\n" +
@@ -258,6 +327,7 @@ Item {
       bar: root.bar
       info: root.info
       visibleGrid: root.isConnected
+      onSustainedPacketLoss: root.recoverConnection()
     }
 
     // ---------- Nearby networks ----------
@@ -271,7 +341,11 @@ Item {
       width: parent.width
       bar: root.bar
       device: root.wifiDevice
-      active: root.opened
+      // Radio off means a scan can never complete -- gating on wifiEnabled
+      // too keeps the scanner from spinning forever with nothing to show
+      // for it (and matches the "only run while actually useful" cost
+      // tradeoff already described below).
+      active: root.opened && Networking.wifiEnabled
       extraHeight: root.extraForList
     }
   }

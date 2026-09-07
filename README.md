@@ -116,6 +116,19 @@ The built-in widget is left untouched and can be re-enabled as a fallback
     the same subnet, saved as a profile for one-click re-apply), or
     **physically unplug and replug the cable**, which is the only
     reliable way to force a real link reset on Ethernet.
+    **Confirmed reliable trigger**: moving the cable to a new network
+    while the profile is still set to Static, then switching it to DHCP
+    *after* the move (rather than unplugging first) — the address and DNS
+    come through fine but the gateway consistently comes back blank, and
+    neither retrying DHCP nor a software `down`/`up` cycle fixes it, only
+    a physical unplug/replug of the cable does. Confirmed this is not a
+    same-subnet-with-Wi-Fi conflict (checked live: Wi-Fi and Ethernet
+    sharing a subnet is fine on its own, each interface just needs its
+    own gateway to build a route from — the actual DHCP lease genuinely
+    came back with `IP4.GATEWAY: --`, no gateway at all, address and DNS
+    populated). Software retry re-requests against the same still-carrier-up
+    link and gets the same incomplete answer; only a real link-down (the
+    physical reseat) prompts the router to send a complete lease.
 
 ## Repo layout
 

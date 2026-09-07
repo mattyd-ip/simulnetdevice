@@ -33,6 +33,15 @@ Item {
   readonly property bool hasInternetPing: internetPingSamples.length > 0
   readonly property bool hasTransferStats: info.rx_bytes !== undefined
 
+  // Fired when the most recent sustainedLossThreshold samples are *all*
+  // lost -- distinct from internetPingPacketLoss (a percentage over the
+  // whole pingHistoryWindow, which stays elevated for a while even after
+  // things recover and so is the wrong signal to act on). This is for
+  // callers that want to actually do something about a connection that's
+  // really stuck right now, not just display a number.
+  readonly property int sustainedLossThreshold: 5  // ~15s at the 3s poll interval
+  signal sustainedPacketLoss()
+
   implicitHeight: visibleGrid ? grid.implicitHeight : 0
   visible: visibleGrid
 
@@ -52,6 +61,8 @@ Item {
     internetPingSamples = p.internetPingSamples
     internetPingLatency = p.internetPingLatency
     internetPingPacketLoss = p.internetPingPacketLoss
+
+    if (Model.isSustainedPingLoss(internetPingSamples, sustainedLossThreshold)) sustainedPacketLoss()
   }
 
   // Reset so reopening the panel (or the interface dropping out) doesn't

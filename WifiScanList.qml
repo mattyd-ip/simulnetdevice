@@ -62,7 +62,11 @@ Item {
   // the field the user is typing into.
   property string passwordSsid: ""
   property string passwordText: ""
-  readonly property bool anyFieldFocused: passwordSsid !== "" && passwordInput.activeFocus
+  // Set/cleared by the open row delegate's TextField (onActiveFocusChanged)
+  // -- can't reference a delegate-scoped `passwordInput` id from here, it
+  // only exists inside that ListView delegate's own component instance.
+  property bool passwordFieldHasFocus: false
+  readonly property bool anyFieldFocused: passwordSsid !== "" && passwordFieldHasFocus
 
   readonly property var connectionFailReasons: ({
     NoSecrets: ConnectionFailReason.NoSecrets,
@@ -147,7 +151,8 @@ Item {
   function openPasswordPrompt(ssid) {
     if (passwordSsid !== ssid) passwordText = ""
     passwordSsid = ssid
-    Qt.callLater(function() { passwordInput.forceActiveFocus() })
+    // Focusing the field itself happens in the delegate, which reacts to
+    // isPasswordOpen -- `passwordInput` isn't reachable from this scope.
   }
 
   function cancelPasswordPrompt() {
@@ -242,6 +247,7 @@ Item {
     PanelSectionHeader {
       id: sectionHeaderItem
       text: {
+        if (!Networking.wifiEnabled) return "NEARBY NETWORKS"
         if (root.device && root.device.scannerEnabled && root.wifiNetworks.length === 0) return "NEARBY NETWORKS (SCANNING…)"
         if (root.wifiNetworks.length > root.visibleRowCount) return "NEARBY NETWORKS (" + root.wifiNetworks.length + ")"
         return "NEARBY NETWORKS"
@@ -254,7 +260,7 @@ Item {
       id: emptyStateText
       textFormat: Text.PlainText
       visible: root.wifiNetworks.length === 0
-      text: root.device ? "Scanning for networks…" : "No Wi-Fi adapter."
+      text: !Networking.wifiEnabled ? "Wi-Fi is off." : (root.device ? "Scanning for networks…" : "No Wi-Fi adapter.")
       color: Qt.darker(root.bar.foreground, 1.4)
       font.family: root.bar.fontFamily
       font.pixelSize: Style.font.bodySmall
@@ -417,6 +423,16 @@ Item {
 
           Behavior on height { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
+          // `passwordInput` is only in scope within this delegate -- this is
+          // the one place that can actually focus it when this row's prompt
+          // opens (root.openPasswordPrompt can't reach it).
+          Connections {
+            target: rowWrap
+            function onIsPasswordOpenChanged() {
+              if (rowWrap.isPasswordOpen) Qt.callLater(function() { passwordInput.forceActiveFocus() })
+            }
+          }
+
           Row {
             id: passwordForm
             width: parent.width
@@ -434,6 +450,11 @@ Item {
               text: rowWrap.isPasswordOpen ? root.passwordText : ""
               onTextChanged: if (rowWrap.isPasswordOpen) root.passwordText = text
               onAccepted: if (root.passwordText.length > 0) root.connectWithPassphrase(rowWrap.net.ssid, root.passwordText)
+              // No isPasswordOpen guard: only the one open row's field can
+              // ever hold focus (closed rows are height:0 and invisible, so
+              // Qt Quick can't focus them), so an unconditional update here
+              // can't be clobbered by a different, inactive row.
+              onActiveFocusChanged: root.passwordFieldHasFocus = activeFocus
               Keys.onEscapePressed: root.cancelPasswordPrompt()
             }
 

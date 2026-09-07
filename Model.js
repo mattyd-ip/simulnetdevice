@@ -187,6 +187,20 @@ function pingPacketLossPercent(samples) {
   return Math.round((lost / values.length) * 100)
 }
 
+// True only when the most recent `threshold` samples are *all* lost --
+// distinct from pingPacketLossPercent (a share of the whole history, which
+// stays nonzero for a while after a real recovery). This is for deciding
+// whether a connection is stuck right now, not for display.
+function isSustainedPingLoss(samples, threshold) {
+  var values = Array.isArray(samples) ? samples : []
+  var need = Math.max(1, parseInt(threshold, 10) || 1)
+  if (values.length < need) return false
+  for (var i = values.length - need; i < values.length; i++) {
+    if (values[i] !== null) return false
+  }
+  return true
+}
+
 function pingLatencyState(previous, next, limit, averageLimit) {
   var prev = previous || {}
   var sample = next || {}
@@ -367,6 +381,7 @@ if (typeof module !== "undefined") {
     throughputState: throughputState,
     pingLatencyState: pingLatencyState,
     pingPacketLossPercent: pingPacketLossPercent,
+    isSustainedPingLoss: isSustainedPingLoss,
     formatBytes: formatBytes,
     formatRate: formatRate,
     formatPingLatency: formatPingLatency,

@@ -105,8 +105,14 @@ Panel {
           bar: root.bar
           opened: root.opened
           // Cross-wired so each section's "Set primary" reflects the real
-          // comparison against the other's actual metric, not a guess.
-          primaryCompareMetric: ethernetSection.routeMetric
+          // comparison against the other's actual metric, not a guess --
+          // but only while the other is actually connected. A disabled
+          // interface's last-saved metric is stale and shouldn't get to
+          // outrank the one interface that's actually up: Model.isPrimary
+          // already treats a non-finite compare value as "nothing to
+          // compete with, so I'm primary by default" -- undefined here (not
+          // ethernetSection.routeMetric) is what triggers that.
+          primaryCompareMetric: ethernetSection.isConnected ? ethernetSection.routeMetric : undefined
           onRouteMetricApplied: ethernetSection.setRouteMetric(Model.SECONDARY_METRIC)
           // Let the nearby-networks list grow to match Ethernet's height in
           // two-column mode -- Ethernet's own height never depends on
@@ -125,7 +131,8 @@ Panel {
           width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
           bar: root.bar
           opened: root.opened
-          primaryCompareMetric: wifiSection.routeMetric
+          // See WifiSection's identical comment.
+          primaryCompareMetric: wifiSection.isConnected ? wifiSection.routeMetric : undefined
           onRouteMetricApplied: wifiSection.setRouteMetric(Model.SECONDARY_METRIC)
         }
       }

@@ -88,16 +88,42 @@ Item {
 
   function setRouteMetric(metric) {
     if (!hasProfile) return
+    // hasProfile alone doesn't mean "currently connected" -- the status
+    // script names a saved profile as a fallback even while disconnected --
+    // so without this, the sibling's demote-to-secondary cross-wire (see
+    // Panel.qml) would force `connection up` on an interface the user just
+    // explicitly disabled, silently turning it back on.
+    if (!isConnected) return
+    var promoting = metric === Model.PRIMARY_METRIC
+    // Even when connected, skip the actual modify+up round-trip if the
+    // metric is already what's being asked for: `connection up` forces a
+    // real reactivation (a genuine Wi-Fi disconnect/reconnect blip on that
+    // side, confirmed live), which every unrelated "Set primary" click on
+    // the sibling would otherwise trigger for no actual change. But a
+    // genuine "make me primary" click still has to tell the sibling to
+    // demote even when *my* metric already happens to be right -- otherwise
+    // two connections that both ended up at the same metric (a leftover
+    // from an earlier bug) can never be untied, since neither side's click
+    // would ever have anything of its own left to change.
+    if (parseInt(metric, 10) === routeMetric) {
+      if (promoting) root.routeMetricApplied()
+      return
+    }
     metricProc.command = ["bash", "-c", setMetricScript, "ethernet-metric", info.connection, String(metric)]
+    // See WifiSection's identical comment: only a genuine promotion should
+    // notify the sibling to demote, or the sibling's own demote-in-response
+    // bounces back and demotes us too, forever.
+    metricProc.promoting = promoting
     metricProc.running = true
   }
   signal routeMetricApplied()
 
   Process {
     id: metricProc
+    property bool promoting: false
     onExited: function(exitCode) {
       root.refresh()
-      root.routeMetricApplied()
+      if (promoting) root.routeMetricApplied()
     }
   }
 
@@ -115,6 +141,12 @@ Item {
   property string pendingAction: ""  // "connect" | "disconnect" | "apply-dhcp" | "apply-static"
   readonly property bool busy: pendingAction !== ""
   property string lastError: ""
+  // Set when an apply fails specifically because there's no carrier (e.g.
+  // clicked Apply/DHCP before actually plugging the cable in) -- there's no
+  // active connection for NetworkManager to retry on its own once the cable
+  // does go live, so this plugin has to notice and redo the same apply
+  // itself (see onHasCableChanged below).
+  property string retryActionOnCarrier: ""  // "" | "apply-dhcp" | "apply-static"
 
   readonly property bool canApply: Model.canApplyStatic({ address: addressField, gateway: gatewayField })
 
@@ -158,8 +190,14 @@ Item {
   property bool staticPanelOpen: false
   property bool manualEntryOpen: false
 
+  // A click here is the user changing their mind -- it should always win,
+  // even over an apply that's still working through its retries (e.g. a
+  // DHCP apply on a network with no DHCP server at all keeps retrying and
+  // sitting "busy" for as long as NetworkManager's own DHCP timeout takes
+  // per attempt, which is long enough that every button, including this
+  // one, would otherwise stay frozen for minutes -- confirmed live).
   function selectMode(mode) {
-    if (busy) return
+    if (busy) cancelInFlightApply()
     if (mode === "auto") {
       formMode = "auto"
       manualEntryOpen = false
@@ -183,6 +221,24 @@ Item {
     staticPanelOpen = true
   }
 
+  // Stops whatever actionProc/retry/recovery cycle is in flight so a fresh
+  // explicit click (selectMode, applyDhcp, applyStatic) can proceed right
+  // away instead of being silently swallowed by the busy guard.
+  function cancelInFlightApply() {
+    applyRetryTimer.stop()
+    retryActionOnCarrier = ""
+    applyRetriesLeft = 0
+    recoveryPhase = ""
+    recovering = false
+    // Bump first: if actionProc is genuinely running and gets killed below,
+    // its eventual (delayed) exit will carry the old dispatchGeneration and
+    // onExited will just ignore it instead of acting on now-stale state.
+    actionGeneration += 1
+    if (actionProc.running) actionProc.running = false
+    pendingAction = ""
+    lastError = ""
+  }
+
   // Only ever syncs FROM the live profile INTO "manual" (to reflect a
   // static config that's actually applied). Never forces "manual" back to
   // "auto" on its own -- the live method stays "auto" the whole time the
@@ -203,20 +259,55 @@ Item {
 
   onInfoChanged: syncFormMode()
 
+  // Bumped by cancelInFlightApply() and every dispatch below -- lets
+  // actionProc.onExited recognize and ignore the delayed exit of a process
+  // that was killed out from under it, rather than acting on stale state
+  // (see cancelInFlightApply's comment).
+  property int actionGeneration: 0
+
   function connectEthernet() {
     if (busy || !hasProfile) return
+    retryActionOnCarrier = ""
     pendingAction = "connect"
     lastError = ""
+    actionGeneration += 1
+    actionProc.dispatchGeneration = actionGeneration
     actionProc.command = ["nmcli", "connection", "up", info.connection]
     actionProc.running = true
   }
 
   function disconnectEthernet() {
     if (busy || !iface) return
+    retryActionOnCarrier = ""
     pendingAction = "disconnect"
     lastError = ""
+    actionGeneration += 1
+    actionProc.dispatchGeneration = actionGeneration
     actionProc.command = ["nmcli", "device", "disconnect", iface]
     actionProc.running = true
+  }
+
+  // See WifiSection's identical comment on the same real, confirmed-live
+  // condition. Ethernet's equivalent of "radio off/on" is a disconnect
+  // followed by a reconnect (recoveryPhase tracks which half is in
+  // flight, chained together in actionProc.onExited below since
+  // connectEthernet() can't run until disconnectEthernet()'s own
+  // pendingAction has actually cleared).
+  property bool recovering: false
+  property bool recoveryOnCooldown: false
+  property string recoveryPhase: ""  // "" | "disconnecting" | "connecting"
+  function recoverConnection() {
+    if (recovering || recoveryOnCooldown || busy || !isConnected) return
+    recovering = true
+    recoveryPhase = "disconnecting"
+    disconnectEthernet()
+  }
+
+  Timer {
+    id: recoveryCooldownTimer
+    interval: 30000
+    repeat: false
+    onTriggered: root.recoveryOnCooldown = false
   }
 
   // IPv4 only, and args are passed positionally rather than interpolated
@@ -241,27 +332,108 @@ Item {
     "nmcli connection up \"$conn\" || exit 1\n"
 
   function applyDhcp() {
-    if (busy || !hasProfile) return
+    if (!hasProfile) return
+    if (busy) cancelInFlightApply()
+    retryActionOnCarrier = ""
+    applyRetriesLeft = maxApplyRetries
     pendingAction = "apply-dhcp"
     lastError = ""
+    actionGeneration += 1
+    actionProc.dispatchGeneration = actionGeneration
     actionProc.command = ["bash", "-c", applyIpv4Script, "ethernet-ipv4", "dhcp", info.connection, "", "", ""]
     actionProc.running = true
   }
 
   function applyStatic() {
-    if (busy || !hasProfile || !canApply) return
+    if (!hasProfile || !canApply) return
+    if (busy) cancelInFlightApply()
+    retryActionOnCarrier = ""
+    applyRetriesLeft = maxApplyRetries
     pendingAction = "apply-static"
     lastError = ""
     var dns = Model.normalizeDns(dnsField)
+    actionGeneration += 1
+    actionProc.dispatchGeneration = actionGeneration
     actionProc.command = ["bash", "-c", applyIpv4Script, "ethernet-ipv4", "static", info.connection, addressField, gatewayField, dns]
     actionProc.running = true
   }
 
+  // If the cable actually goes live after a failed apply-dhcp/apply-static
+  // (see actionProc.onExited below), redo the same apply automatically --
+  // NetworkManager has nothing active to retry on its own here, since the
+  // failed `connection up` never got as far as creating one.
+  onHasCableChanged: {
+    if (!hasCable || retryActionOnCarrier === "") return
+    var action = retryActionOnCarrier
+    retryActionOnCarrier = ""
+    if (action === "apply-static") applyStatic()
+    else if (action === "apply-dhcp") applyDhcp()
+  }
+
+  // Separate from the carrier-watch retry above: confirmed live that even
+  // with the cable *already* connected, a failed apply-dhcp/apply-static
+  // can keep failing for a few seconds afterward (NetworkManager settling
+  // from the previous failed activation, not something instant-retry fixes
+  // but also not something worth making the user click Apply repeatedly
+  // for). actionProc.command is left untouched between attempts, so this
+  // just re-fires the exact same command.
+  readonly property int maxApplyRetries: 3
+  property int applyRetriesLeft: 0
+  Timer {
+    id: applyRetryTimer
+    interval: 2000
+    repeat: false
+    onTriggered: actionProc.running = true
+  }
+
   Process {
     id: actionProc
+    property int dispatchGeneration: 0
     stdout: StdioCollector { id: actionStdout; waitForEnd: true }
     stderr: StdioCollector { id: actionStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      // A process killed by cancelInFlightApply() still exits (delayed);
+      // its dispatchGeneration is now behind root.actionGeneration, so
+      // this is stale -- something newer already took over, ignore it.
+      if (dispatchGeneration !== root.actionGeneration) return
+      var isApplyAction = root.pendingAction === "apply-dhcp" || root.pendingAction === "apply-static"
+      if (exitCode !== 0 && isApplyAction && !root.hasCable) {
+        // Genuinely no cable -- don't spend the bounded retry budget on
+        // this, wait for onHasCableChanged instead, which can wait as long
+        // as it actually takes to plug the cable in.
+        root.retryActionOnCarrier = root.pendingAction
+        root.pendingAction = ""
+        root.refresh()
+        return
+      }
+      if (exitCode !== 0 && isApplyAction && root.applyRetriesLeft > 0) {
+        root.applyRetriesLeft -= 1
+        applyRetryTimer.start()
+        return
+      }
+      if (root.pendingAction === "disconnect" && root.recoveryPhase === "disconnecting") {
+        if (exitCode === 0) {
+          root.recoveryPhase = "connecting"
+          root.pendingAction = ""
+          root.refresh()
+          Qt.callLater(function() { root.connectEthernet() })
+          return
+        }
+        // The disconnect half itself failed -- don't leave recovery wedged
+        // on forever, clear it here too (connect's own completion is what
+        // clears it on the normal path, but that never runs if we don't
+        // even get that far).
+        root.recoveryPhase = ""
+        root.recovering = false
+        root.recoveryOnCooldown = true
+        recoveryCooldownTimer.start()
+      }
+      if (root.pendingAction === "connect" && root.recoveryPhase === "connecting") {
+        root.recoveryPhase = ""
+        root.recovering = false
+        root.recoveryOnCooldown = true
+        recoveryCooldownTimer.start()
+      }
       if (exitCode !== 0) {
         root.lastError = String(actionStderr.text || actionStdout.text || "Command failed").trim()
       } else if (root.pendingAction === "apply-static") {
@@ -312,7 +484,12 @@ Item {
     "if [[ -r /sys/class/net/$iface/statistics/rx_bytes ]]; then printf 'rx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/rx_bytes)\"; fi\n" +
     "if [[ -r /sys/class/net/$iface/statistics/tx_bytes ]]; then printf 'tx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/tx_bytes)\"; fi\n" +
     "if [[ $do_ping == 1 ]]; then\n" +
-    "  ms=$(LC_ALL=C ping -n -c1 -W1 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
+    // -I $iface, not a bare ping to 1.1.1.1: without it this measures
+    // whichever interface currently owns the default route, not this one --
+    // so flipping "Set primary" or disabling the *other* interface would
+    // show packet loss on this row too, even though this interface's own
+    // path never had a problem.
+    "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
     "  printf 'internet_ping_ms\\t%s\\n' \"${ms:-}\"\n" +
     "fi\n" +
     "if [[ -n $conn ]]; then\n" +
@@ -468,6 +645,7 @@ Item {
       bar: root.bar
       info: root.info
       visibleGrid: root.isConnected
+      onSustainedPacketLoss: root.recoverConnection()
     }
 
     // ---------- DHCP / Static IP ----------
