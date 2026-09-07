@@ -20,6 +20,24 @@ Item {
   // Whether the owning popup is open. The PHY scan the scanner performs has
   // a real cost, so it only runs while a user is actually looking.
   property bool active: false
+  // Index of the row under the keyboard cursor, or -1 when the cursor
+  // belongs to some other group (set by WifiSection from Panel.qml's
+  // central cursor controller).
+  property int cursorIndex: -1
+  onCursorIndexChanged: if (cursorIndex >= 0) Qt.callLater(function() {
+    networkListView.positionViewAtIndex(cursorIndex, ListView.Contain)
+  })
+
+  // Keyboard-cursor entry points, mirroring activateRow/forgetRow but by
+  // list position instead of SSID -- WifiSection only knows an index.
+  function activateByIndex(i) {
+    var net = wifiNetworks[i]
+    if (net) activateRow(net)
+  }
+  function forgetByIndex(i) {
+    var net = wifiNetworks[i]
+    if (net && canForgetNetwork(net)) forgetRow(net.ssid)
+  }
 
   readonly property var networkObjects: device && device.networks ? device.networks.values : []
   property var wifiNetworks: []
@@ -48,9 +66,11 @@ Item {
     ? sectionHeaderItem.implicitHeight + column.spacing + emptyStateText.implicitHeight
     : sectionHeaderItem.implicitHeight + column.spacing + listNaturalHeight
 
-  // Per-row in-flight state, same shape as the built-in widget's: at most
-  // one action in flight at a time, tracked by SSID so a row can render
-  // "Connecting…" / "Disconnecting…" / "Forgetting…".
+  // Per-row in-flight state: at most one action in flight at a time, tracked
+  // by SSID so a row can render "Connecting…" / "Disconnecting…" /
+  // "Forgetting…". This bookkeeping (and the functions below that drive it)
+  // is lifted from the built-in omarchy.network widget's Panel.qml, adapted
+  // to this component's own state instead of that widget's.
   property string actionSsid: ""
   property string actionKind: ""  // "connect" | "disconnect" | "forget"
   property string failureSsid: ""
@@ -300,6 +320,18 @@ Item {
         readonly property bool isBusy: root.actionKind !== "" && root.actionSsid === net.ssid
         readonly property bool isFailed: root.failureReason !== "" && root.failureSsid === net.ssid
         readonly property bool isPasswordOpen: root.passwordSsid === net.ssid
+        // Not a Button, so there's no built-in hasCursor fill -- paint the
+        // same hover-cursor tone by hand instead of adopting Button just for
+        // this one flag.
+        readonly property bool hasCursor: root.cursorIndex === index
+
+        Rectangle {
+          anchors.fill: rowColumn
+          anchors.margins: -Style.space(6)
+          radius: Style.cornerRadius
+          visible: rowWrap.hasCursor
+          color: Style.hoverFillFor(root.bar.foreground, Color.accent)
+        }
 
         readonly property string subtitle: {
           if (isBusy) {

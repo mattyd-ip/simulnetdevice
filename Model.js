@@ -1,5 +1,7 @@
-// Pure helpers for the Ethernet plugin. No QML/Quickshell imports here so
-// this stays runnable/testable under plain Node.
+// Pure parsing/formatting/validation helpers shared by the Wi-Fi and
+// Ethernet sections, route-metric control, and static-IP profiles. No
+// QML/Quickshell imports here so this stays runnable/testable under plain
+// Node (see README's Development section).
 
 function parseKeyValue(raw) {
   var next = {}
@@ -121,6 +123,13 @@ function wifiIconFor(strength) {
   var icons = ["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"]
   var index = Math.max(0, Math.min(4, Math.ceil(strength / 20) - 1))
   return icons[index]
+}
+
+// Display text for a band value from `omarchy-network-band` ("auto", "2.4",
+// "5", "6").
+function bandLabel(band) {
+  if (band === "auto" || !band) return "Auto"
+  return band + " GHz"
 }
 
 // ---- Throughput + ping stats (per interface) ----
@@ -370,6 +379,7 @@ if (typeof module !== "undefined") {
     wifiLinkState: wifiLinkState,
     wifiStatusText: wifiStatusText,
     wifiIconFor: wifiIconFor,
+    bandLabel: bandLabel,
     formatSpeed: formatSpeed,
     firstValue: firstValue,
     isManualMethod: isManualMethod,

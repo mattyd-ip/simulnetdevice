@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Io
 import Quickshell.Networking
@@ -21,12 +20,77 @@ Item {
   // for the bar icon and connect switch keeps running regardless.
   property bool opened: false
 
+  // ---------- Keyboard cursor ----------
+  // See WifiSection's identical comment -- driven from Panel.qml's central
+  // cursor controller, -1 whenever the cursor is actually WifiSection's.
+  property bool cursorActive: false
+  property int cursorGroup: -1
+  property int cursorItem: -1
+
+  // Groups, top to bottom: the hero row, the DHCP/Static toggle (only once
+  // there's a profile to configure), then -- only while the Static fields
+  // are actually open -- one group per saved-profile row (each with its own
+  // Apply/Delete, so h/l moves within a row and j/k moves between rows,
+  // matching how they're actually laid out), then "Save current as…", then
+  // "Enter manually" (only while it isn't already open).
+  readonly property var navGroupIds: {
+    var ids = ["hero"]
+    if (root.hasProfile) ids.push("mode")
+    if (root.hasProfile && root.staticPanelOpen) {
+      var profiles = profileList.profiles || []
+      for (var i = 0; i < profiles.length; i++) ids.push("profile-" + i)
+      ids.push("add-profile")
+      if (!root.manualEntryOpen) ids.push("manual-toggle")
+    }
+    return ids
+  }
+  // The group id the cursor is actually on, or "" -- every hasCursor
+  // binding below is just `currentGroupId === "id" && cursorItem === N`.
+  readonly property string currentGroupId: (root.cursorActive && root.cursorGroup >= 0 && root.cursorGroup < root.navGroupIds.length)
+    ? root.navGroupIds[root.cursorGroup] : ""
+
+  function navGroupCount(id) {
+    if (id === "hero") return root.isConnected ? 2 : 1
+    if (id === "mode") return 2
+    if (id.indexOf("profile-") === 0) return 2 // Apply, Delete
+    if (id === "add-profile") return 1
+    if (id === "manual-toggle") return 1
+    return 0
+  }
+
+  function navActivate(id, item) {
+    if (id === "hero") {
+      if (root.isConnected) {
+        if (item === 0) { if (!root.isPrimary) root.setRouteMetric(Model.PRIMARY_METRIC); return }
+        if (item === 1) { if (root.hasProfile && root.hasCable) root.disconnectEthernet(); return }
+      } else if (item === 0) {
+        if (root.hasProfile && root.hasCable) root.connectEthernet()
+      }
+      return
+    }
+    if (id === "mode") { root.selectMode(item === 0 ? "auto" : "manual"); return }
+    if (id.indexOf("profile-") === 0) {
+      var idx = parseInt(id.substring(8), 10)
+      if (item === 0) profileList.applyByIndex(idx)
+      else profileList.deleteByIndex(idx)
+      return
+    }
+    if (id === "add-profile") { profileList.startAdding(); return }
+    if (id === "manual-toggle") { root.manualEntryOpen = true; return }
+  }
+
+  function navDelete(id, item) {
+    if (id.indexOf("profile-") === 0) profileList.deleteByIndex(parseInt(id.substring(8), 10))
+  }
+
   readonly property var networkDevices: Networking.devices ? Networking.devices.values : []
   readonly property var wiredDevice: findDevice(DeviceType.Wired)
   readonly property string iface: wiredDevice ? wiredDevice.name : ""
 
-  // Prefer a connected wired device: a box can expose more than one wired
-  // NIC (onboard + dock, say), and the first-enumerated one may be idle.
+  // Picks the connected device of this type, else the first-enumerated one.
+  // Lifted from the built-in omarchy.network widget's Panel.qml (same
+  // function, unchanged) -- see README's Known limitations for what this
+  // means on a box with two wired NICs (onboard + dock, say).
   function findDevice(type) {
     var devices = networkDevices || []
     var fallback = null
@@ -189,6 +253,11 @@ Item {
   // profile never needs them open).
   property bool staticPanelOpen: false
   property bool manualEntryOpen: false
+  // Same auto-focus pattern as ProfileList's name field and the Wi-Fi
+  // password field -- gives keyboard nav somewhere to land the moment the
+  // fields appear, instead of a dead end below "Enter manually" with no
+  // way to actually reach them.
+  onManualEntryOpenChanged: if (manualEntryOpen) Qt.callLater(function() { addressInput.forceActiveFocus() })
 
   // A click here is the user changing their mind -- it should always win,
   // even over an apply that's still working through its retries (e.g. a
@@ -578,6 +647,7 @@ Item {
           visible: root.isConnected
           enabled: !root.isPrimary
           Layout.alignment: Qt.AlignVCenter
+          hasCursor: root.currentGroupId === "hero" && root.cursorItem === 0
           onClicked: root.setRouteMetric(Model.PRIMARY_METRIC)
         }
 
@@ -588,6 +658,7 @@ Item {
           enabled: root.hasProfile && root.hasCable
           foreground: root.bar.foreground
           Layout.alignment: Qt.AlignVCenter
+          hasCursor: root.currentGroupId === "hero" && root.cursorItem === (root.isConnected ? 1 : 0)
           onToggled: root.isConnected ? root.disconnectEthernet() : root.connectEthernet()
 
           PanelToolTip {
@@ -694,6 +765,7 @@ Item {
           bordered: true
           width: parent.cellWidth
           active: root.formMode === "auto"
+          hasCursor: root.currentGroupId === "mode" && root.cursorItem === 0
           onClicked: root.selectMode("auto")
         }
 
@@ -707,6 +779,7 @@ Item {
           bordered: true
           width: parent.cellWidth
           active: root.formMode === "manual"
+          hasCursor: root.currentGroupId === "mode" && root.cursorItem === 1
           onClicked: root.selectMode("manual")
         }
       }
@@ -749,6 +822,9 @@ Item {
             currentGateway: root.gatewayField
             currentDns: root.dnsField
             onApplyRequested: function(profile) { root.applyProfileToForm(profile) }
+            cursorRowIndex: root.currentGroupId.indexOf("profile-") === 0 ? parseInt(root.currentGroupId.substring(8), 10) : -1
+            cursorRowItem: root.cursorItem
+            addToggleHasCursor: root.currentGroupId === "add-profile"
           }
 
           Text {
@@ -779,6 +855,7 @@ Item {
             verticalPadding: Style.spacing.controlPaddingY
             bordered: true
             width: parent.width
+            hasCursor: root.currentGroupId === "manual-toggle"
             onClicked: root.manualEntryOpen = true
           }
 
@@ -805,6 +882,7 @@ Item {
                     horizontalPadding: Style.spacing.controlGap
                     verticalPadding: Style.spacing.controlPaddingY
                     onTextChanged: root.addressField = text
+                    onAccepted: if (root.canApply) root.applyStatic()
                   }
 
                   TextField {
@@ -816,6 +894,7 @@ Item {
                     horizontalPadding: Style.spacing.controlGap
                     verticalPadding: Style.spacing.controlPaddingY
                     onTextChanged: root.gatewayField = text
+                    onAccepted: if (root.canApply) root.applyStatic()
                   }
 
                   TextField {
@@ -827,6 +906,7 @@ Item {
                     horizontalPadding: Style.spacing.controlGap
                     verticalPadding: Style.spacing.controlPaddingY
                     onTextChanged: root.dnsField = text
+                    onAccepted: if (root.canApply) root.applyStatic()
                   }
 
                   Button {
@@ -850,5 +930,12 @@ Item {
 
   // Static-IP text fields own their own keys while focused -- used by
   // Panel.qml's PanelKeyCatcher.blocked so h/j/k/l and space type normally.
-  readonly property bool anyFieldFocused: addressInput.activeFocus || gatewayInput.activeFocus || dnsInput.activeFocus || profileList.anyFieldFocused
+  // Gated on manualEntryOpen, not just .activeFocus: a successful apply
+  // collapses the fields asynchronously (see the "apply-static" Process
+  // exit handler above) without anything explicitly blurring them first,
+  // and Qt Quick doesn't clear activeFocus just because an item became
+  // invisible -- without this gate, .activeFocus alone would stay stuck
+  // true forever on a field nobody can even see anymore, and every future
+  // keypress would silently type into it instead of navigating.
+  readonly property bool anyFieldFocused: (root.manualEntryOpen && (addressInput.activeFocus || gatewayInput.activeFocus || dnsInput.activeFocus)) || profileList.anyFieldFocused
 }

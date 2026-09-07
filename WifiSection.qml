@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Io
 import Quickshell.Networking
@@ -7,21 +6,78 @@ import qs.Ui
 import qs.Commons
 import "Model.js" as Model
 
-// Wi-Fi status + radio on/off + primary-route selection + nearby-network
-// scanning/joining/forgetting, scoped directly to the Wi-Fi interface rather
-// than the default route -- same reasoning as EthernetSection.qml. Band
-// selection and WPA-Enterprise (802.1x) networks stay the built-in
-// omarchy.network widget's job for now (see docs/plans -- Non-goals).
+// Wi-Fi status + radio on/off + primary-route selection + band selection +
+// nearby-network scanning/joining/forgetting, scoped directly to the Wi-Fi
+// interface rather than the default route -- same reasoning as
+// EthernetSection.qml. WPA-Enterprise (802.1x) networks stay the built-in
+// omarchy.network widget's job for now (see README's Known limitations).
 Item {
   id: root
 
   required property QtObject bar
   property bool opened: false
 
+  // ---------- Keyboard cursor ----------
+  // Driven from Panel.qml's central cursor controller (see its own
+  // "Keyboard cursor" comment) -- cursorGroup arrives as -1 whenever the
+  // cursor actually belongs to EthernetSection, which makes every
+  // `hasCursor` binding below naturally false without this component
+  // needing to know the other one exists.
+  property bool cursorActive: false
+  property int cursorGroup: -1
+  property int cursorItem: -1
+
+  // Groups, top to bottom: the hero row, the band pills (only when there's
+  // an actual band choice), then one group per nearby network -- each its
+  // own group (not one "list" group with h/l between rows) because the
+  // rows are stacked vertically, and j/k is what moves vertically here;
+  // h/l between rows read as sideways motion for something laid out
+  // top-to-bottom (this is what ProfileList's saved-profile rows do too).
+  readonly property var navGroupIds: {
+    var ids = ["hero"]
+    if (root.canSelectBand) ids.push("band")
+    var nets = scanList.wifiNetworks || []
+    for (var i = 0; i < nets.length; i++) ids.push("network-" + i)
+    return ids
+  }
+  // The group id the cursor is actually on, or "" -- every hasCursor
+  // binding below is just `currentGroupId === "id" && cursorItem === N`.
+  readonly property string currentGroupId: (root.cursorActive && root.cursorGroup >= 0 && root.cursorGroup < root.navGroupIds.length)
+    ? root.navGroupIds[root.cursorGroup] : ""
+
+  function navGroupCount(id) {
+    if (id === "hero") return root.isConnected ? 2 : 1
+    if (id === "band") return bandRow.bands.length
+    if (id.indexOf("network-") === 0) return 1 // whole row activates as one; forget is "x", not a second item
+    return 0
+  }
+
+  function navActivate(id, item) {
+    if (id === "hero") {
+      if (root.isConnected) {
+        if (item === 0) { if (!root.isPrimary) root.setRouteMetric(Model.PRIMARY_METRIC); return }
+        if (item === 1) { root.toggleRadio(); return }
+      } else if (item === 0) {
+        root.toggleRadio()
+      }
+      return
+    }
+    if (id === "band") { root.setBand(bandRow.bands[item]); return }
+    if (id.indexOf("network-") === 0) { scanList.activateByIndex(parseInt(id.substring(8), 10)); return }
+  }
+
+  function navDelete(id, item) {
+    if (id.indexOf("network-") === 0) scanList.forgetByIndex(parseInt(id.substring(8), 10))
+  }
+
   readonly property var networkDevices: Networking.devices ? Networking.devices.values : []
   readonly property var wifiDevice: findDevice(DeviceType.Wifi)
   readonly property string iface: wifiDevice ? wifiDevice.name : ""
 
+  // Picks the connected device of this type, else the first-enumerated one.
+  // Lifted from the built-in omarchy.network widget's Panel.qml (same
+  // function, unchanged) -- see README's Known limitations for what this
+  // means on a box with two Wi-Fi adapters.
   function findDevice(type) {
     var devices = networkDevices || []
     var fallback = null
@@ -98,6 +154,69 @@ Item {
     onExited: function(exitCode) {
       root.refresh()
       if (promoting) root.routeMetricApplied()
+    }
+  }
+
+  // Band selection delegates entirely to `omarchy-network-band`, the same
+  // system CLI the built-in omarchy.network widget shells out to -- it
+  // already does the real work (reading/pinning 802-11-wireless.band via
+  // nmcli, cross-checking reachable bands via `iw`, and reverting on a
+  // failed reassociation), so this just polls its status and forwards clicks
+  // to it rather than reimplementing any of that.
+  property var bandInfo: ({})
+  readonly property string bandCurrent: bandInfo.band || ""
+  readonly property string bandSelected: bandInfo.selected || "auto"
+  readonly property var bandAvailable: (bandInfo.available || "").split(" ").filter(function(b) { return b.length > 0 })
+  property string pendingBand: ""
+  readonly property bool bandBusy: pendingBand !== ""
+  readonly property string bandEffective: bandBusy ? pendingBand : bandSelected
+  // Also stays true once a band is pinned even if a later scan can't confirm
+  // more than one band right now (weak signal, AP briefly missing from the
+  // cache) -- otherwise the control would vanish while a non-Auto pin is
+  // still in effect, with no way back to Auto short of `omarchy network
+  // band auto` from a terminal.
+  readonly property bool canSelectBand: root.isConnected
+    && (root.bandAvailable.length > 1 || root.bandEffective !== "auto")
+
+  function refreshBand() {
+    if (bandStatusProc.running) return
+    bandStatusProc.command = ["omarchy-network-band"]
+    bandStatusProc.running = true
+  }
+
+  Process {
+    id: bandStatusProc
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.bandInfo = Model.parseKeyValue(text) }
+  }
+
+  // Slower than pollTimer on purpose: this shells out to nmcli/iw several
+  // times, and band availability only moves when a scan turns up a new BSSID.
+  Timer {
+    id: bandPollTimer
+    interval: 4000
+    running: root.opened
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.refreshBand()
+  }
+
+  // Pinning a band forces a real reassociation, so this gets its own Process
+  // rather than sharing metricProc -- a concurrent "Set primary" click
+  // shouldn't be blocked by, or block, a band change.
+  function setBand(band) {
+    if (bandActionProc.running || !band || band === root.bandEffective) return
+    root.pendingBand = band
+    bandActionProc.command = ["omarchy-network-band", band]
+    bandActionProc.running = true
+  }
+
+  Process {
+    id: bandActionProc
+    stdout: StdioCollector { waitForEnd: true }
+    stderr: StdioCollector { waitForEnd: true }
+    onExited: function(exitCode) {
+      root.pendingBand = ""
+      root.refreshBand()
     }
   }
 
@@ -263,6 +382,7 @@ Item {
           visible: root.isConnected
           enabled: !root.isPrimary
           Layout.alignment: Qt.AlignVCenter
+          hasCursor: root.currentGroupId === "hero" && root.cursorItem === 0
           onClicked: root.setRouteMetric(Model.PRIMARY_METRIC)
         }
 
@@ -271,6 +391,7 @@ Item {
           checked: Networking.wifiEnabled
           foreground: root.bar.foreground
           Layout.alignment: Qt.AlignVCenter
+          hasCursor: root.currentGroupId === "hero" && root.cursorItem === (root.isConnected ? 1 : 0)
           onToggled: root.toggleRadio()
 
           PanelToolTip {
@@ -290,15 +411,38 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(2)
 
-        Text {
-          textFormat: Text.PlainText
-          text: root.ssid
-          color: root.bar.foreground
-          font.family: root.bar.fontFamily
-          font.pixelSize: Style.font.title
-          font.bold: true
-          elide: Text.ElideRight
+        Item {
+          id: titleRow
           width: parent.width
+          implicitHeight: Math.max(ssidText.implicitHeight, bandBadge.implicitHeight)
+
+          Text {
+            id: ssidText
+            textFormat: Text.PlainText
+            text: root.ssid
+            color: root.bar.foreground
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.title
+            font.bold: true
+            elide: Text.ElideRight
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(0, titleRow.width - (bandBadge.visible ? bandBadge.implicitWidth + Style.space(6) : 0))
+          }
+
+          Text {
+            id: bandBadge
+            textFormat: Text.PlainText
+            visible: root.isConnected && root.bandCurrent !== ""
+            text: Model.bandLabel(root.bandCurrent)
+            color: Qt.darker(root.bar.foreground, 1.4)
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.left: ssidText.right
+            anchors.leftMargin: Style.space(6)
+            anchors.verticalCenter: parent.verticalCenter
+          }
         }
         Text {
           textFormat: Text.PlainText
@@ -330,6 +474,61 @@ Item {
       onSustainedPacketLoss: root.recoverConnection()
     }
 
+    // ---------- Wi-Fi band ----------
+    PanelSeparator {
+      id: bandSeparator
+      visible: root.canSelectBand
+      foreground: root.bar.foreground
+    }
+
+    Column {
+      id: bandSection
+      visible: root.canSelectBand
+      width: parent.width
+      spacing: Style.space(6)
+
+      PanelSectionHeader {
+        text: "WI-FI BAND"
+        foreground: root.bar.foreground
+        fontFamily: root.bar.fontFamily
+      }
+
+      Row {
+        id: bandRow
+        width: parent.width
+        spacing: Style.space(6)
+
+        readonly property var bands: ["auto"].concat(root.bandAvailable)
+        readonly property real cellWidth: (width - spacing * (bands.length - 1)) / Math.max(1, bands.length)
+
+        Repeater {
+          model: bandRow.bands
+
+          Button {
+            required property string modelData
+            required property int index
+            text: Model.bandLabel(modelData)
+            tooltipText: modelData === "auto" ? "Let Wi-Fi pick the band" : "Stay on " + Model.bandLabel(modelData)
+            fontSize: Style.font.bodySmall
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+            bordered: true
+            width: bandRow.cellWidth
+            // Which mode is pinned (Auto vs a specific band) -- the live
+            // band itself is shown next to the SSID in the hero row instead
+            // of also lighting up its pill here, which read as two
+            // contradictory highlights when Auto picked a specific band.
+            active: root.bandEffective === modelData
+            enabled: !root.bandBusy
+            hasCursor: root.currentGroupId === "band" && root.cursorItem === index
+            onClicked: root.setBand(modelData)
+          }
+        }
+      }
+    }
+
     // ---------- Nearby networks ----------
     PanelSeparator {
       id: networksSeparator
@@ -347,6 +546,7 @@ Item {
       // tradeoff already described below).
       active: root.opened && Networking.wifiEnabled
       extraHeight: root.extraForList
+      cursorIndex: root.currentGroupId.indexOf("network-") === 0 ? parseInt(root.currentGroupId.substring(8), 10) : -1
     }
   }
 
@@ -363,6 +563,8 @@ Item {
     heroItem.implicitHeight + column.spacing
     + (root.isConnected ? statsSeparator.implicitHeight + column.spacing : 0)
     + (root.isConnected ? statsGrid.implicitHeight + column.spacing : 0)
+    + (root.canSelectBand ? bandSeparator.implicitHeight + column.spacing : 0)
+    + (root.canSelectBand ? bandSection.implicitHeight + column.spacing : 0)
     + networksSeparator.implicitHeight + column.spacing
     + scanList.unstretchedImplicitHeight
 

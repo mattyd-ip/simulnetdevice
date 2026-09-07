@@ -30,6 +30,22 @@ Item {
   // navigation while the profile-name field is focused.
   readonly property bool anyFieldFocused: addingProfile && nameInput.activeFocus
 
+  // Row/item under the keyboard cursor (item 0 = Apply, 1 = Delete), or -1
+  // (set by EthernetSection from Panel.qml's central cursor controller).
+  property int cursorRowIndex: -1
+  property int cursorRowItem: -1
+  property bool addToggleHasCursor: false
+
+  function applyByIndex(i) {
+    var profile = profiles[i]
+    if (profile) applyRequested(profile)
+  }
+  function deleteByIndex(i) { deleteProfileAt(i) }
+  function startAdding() {
+    root.addingProfile = true
+    Qt.callLater(function() { nameInput.forceActiveFocus() })
+  }
+
   implicitWidth: column.implicitWidth
   implicitHeight: column.implicitHeight
 
@@ -156,6 +172,7 @@ Item {
               horizontalPadding: Style.spacing.controlPaddingX
               verticalPadding: Style.spacing.controlPaddingY
               bordered: true
+              hasCursor: root.cursorRowIndex === index && root.cursorRowItem === 0
               onClicked: root.applyRequested(modelData)
             }
 
@@ -165,6 +182,7 @@ Item {
               foreground: root.bar.foreground
               hoverColor: root.bar.urgent
               fontFamily: root.bar.fontFamily
+              hasCursor: root.cursorRowIndex === index && root.cursorRowItem === 1
               onClicked: root.deleteProfileAt(index)
             }
           }
@@ -194,10 +212,8 @@ Item {
         bordered: true
         width: parent.width
         enabled: Model.isValidCidr(root.currentAddress)
-        onClicked: {
-          root.addingProfile = true
-          Qt.callLater(function() { nameInput.forceActiveFocus() })
-        }
+        hasCursor: root.addToggleHasCursor
+        onClicked: root.startAdding()
       }
 
       Row {
