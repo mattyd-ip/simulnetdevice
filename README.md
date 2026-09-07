@@ -6,15 +6,27 @@ independently, at the same time.
 ## Why this exists
 
 The built-in `omarchy.network` widget only ever reports on whichever
-interface currently owns the default route (`ip route get`). If Wi-Fi and
-Ethernet are both connected — two different networks, say — the built-in
-widget shows exactly one of them and hides the other entirely. Every status
-query in netctl is scoped directly to a specific interface (`ip`/`nmcli
-... dev $iface`) instead, so both show up correctly no matter which one is
-carrying the default route.
+interface currently owns the default route. If Wi-Fi and Ethernet are both
+connected — two different networks, say — the built-in widget shows exactly
+one of them and hides the other entirely. Every status query in netctl is
+scoped directly to a specific interface instead, so both show up correctly
+no matter which one is carrying the default route.
 
 The built-in widget is left untouched and can be re-enabled as a fallback
 (`omarchy plugin enable omarchy.network`) if this one ever breaks.
+
+## Installation
+
+```bash
+omarchy plugin add <this-repo's-git-url> --enable
+```
+
+Or, from a local clone:
+
+```bash
+git clone <this-repo's-git-url> ~/.config/omarchy/plugins/netctl
+omarchy plugin enable netctl
+```
 
 ## Current features
 
@@ -30,6 +42,9 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   network wins instead of NetworkManager's built-in wired-beats-wireless
   default.
 - **Wi-Fi radio on/off** toggle.
+- **Wi-Fi band selection** — pin the connection to 2.4/5/6GHz or leave it on
+  Auto; only offered when the network actually answers on more than one
+  band. The live band always shows next to the network name regardless.
 - **Ethernet connect/disconnect** toggle.
 - **DHCP / Static IPv4 toggle for Ethernet**. The DHCP/Static buttons
   themselves are always visible; clicking "Static" is what opens the
@@ -52,12 +67,23 @@ The built-in widget is left untouched and can be re-enabled as a fallback
 - **Wi-Fi network scanning, joining, and forgetting** — nearby networks
   (sorted connected/known-first, then by signal), a password prompt for
   networks that need one, a lock icon for anything requiring credentials,
-  and a forget button for saved networks. Built directly on Quickshell's
-  reactive `WifiDevice`/`WifiNetwork` objects (`connect()`,
-  `connectWithPsk()`, `forget()`), so there's no `nmcli` scripting involved.
-  The list shows about 4 rows at a time and scrolls for the rest (the
-  section header shows the total count), so a dense area with dozens of
-  visible networks doesn't blow out the popup.
+  and a forget button for saved networks. The list shows about 4 rows at a
+  time and scrolls for the rest (the section header shows the total count),
+  so a dense area with dozens of visible networks doesn't blow out the
+  popup.
+- **Full keyboard navigation** — `j`/`k` (or ↓/↑) move between control
+  groups, `h`/`l` (or ←/→) move between items in the current group and hop
+  to the other column when Wi-Fi and Ethernet are side by side, `Space`/
+  `Enter` activates whatever's highlighted, `x` forgets a highlighted
+  Wi-Fi network, `Tab` switches to the next bar widget, and `Escape` closes
+  the popup (or cancels a password/profile-name entry while typing).
+
+## Tested on
+
+Omarchy 4.0.2 (Arch Linux, kernel 7.1.9-arch1-2), NetworkManager (`nmcli`
+1.58.1), one Wi-Fi adapter + one wired Ethernet adapter. See Known
+limitations below for what's untested (a second adapter of the same type,
+non-Arch systems, etc.).
 
 ## Known limitations / non-goals (for now)
 
@@ -65,98 +91,35 @@ The built-in widget is left untouched and can be re-enabled as a fallback
   WPA2/WPA3-Personal, WEP, and open/OWE networks. Enterprise networks (the
   kind that ask for an identity + password, common on corporate/campus
   Wi-Fi) still need the built-in `omarchy.network` widget.
-- **No Wi-Fi band selection or QR-code sharing.** Both stay the built-in
-  widget's job for now.
+- **No QR-code Wi-Fi sharing, speed test shortcut, or system-wide DNS
+  provider quick-switch.** These stay the built-in widget's job for now
+  (the first two are just shortcut buttons to the separate `omarchy.wifiqr`
+  and `omarchy.speedtest` plugins, both still reachable on their own if
+  enabled; the DNS quick-switch changes DNS for the whole system, not one
+  interface, which is out of scope here).
 - **IPv4 only.** No IPv6 configuration.
-- **Static-IP profiles are Ethernet-only right now**, though the data model
-  doesn't assume that — extending the picker to Wi-Fi later is
-  straightforward.
-- **No per-process bandwidth monitoring**, by choice. Investigated two
-  approaches — `nethogs` running as root (needs a persistent privileged
-  daemon and a new sudoers rule) and sampling `ss -tip` every few seconds
-  (no root needed, but TCP-only) — and decided against adding either: it's
-  bloat this plugin doesn't need to stay useful, and other plugins already
-  cover this ground.
+- **Static-IP profiles are Ethernet-only right now.**
+- **No per-process bandwidth monitoring.** Other plugins already cover this
+  ground.
+- **One Wi-Fi + one Ethernet interface, assumed.** A second adapter of the
+  same type (a second Wi-Fi card, or an onboard + dock/USB Ethernet NIC) is
+  invisible to netctl — no error, it just never appears.
 
 ## Troubleshooting
 
-- **Connection shows "Connected" but Gateway is blank, and you lose all
-  network access if the other interface goes down.** This means the DHCP
-  server on the router isn't sending a gateway (the DHCP "Router" option)
-  in that lease — NetworkManager has nothing to build a default route
-  from, so the interface can only reach its own subnet, not the internet.
-  It's happened on both Wi-Fi and Ethernet on the same router here, so
-  it reads as an intermittent router/DHCP-server quirk, not something
-  specific to one interface, one cable, or one switch port — and not
-  something netctl or NetworkManager can detect or fix automatically.
-  The fix differs by interface, because of a real asymmetry in what
-  NetworkManager can force without root:
-  - **Wi-Fi**: just disconnect and reconnect the network (radio off/on,
-    or reconnect from the nearby-networks list). For Wi-Fi the connection
-    state *is* the link-layer association — disconnecting genuinely
-    drops and re-establishes the 802.11 link, confirmed live in
-    NetworkManager's own log (supplicant state going
-    `internal-starting -> disconnected -> prepare` before a fresh DHCP
-    transaction). That full reset is enough to get a correct lease back.
-  - **Ethernet**: the equivalent doesn't exist in software. Switching
-    back to DHCP from this widget (or plain `nmcli`) already forces a
-    genuine fresh DHCP transaction, not a stale renewal — confirmed by
-    watching NetworkManager's logs do a full new lease negotiation. But
-    neither that nor `nmcli device disconnect`/`connect` ever drops the
-    physical carrier (`/sys/class/net/<iface>/carrier` stays `1`
-    throughout, tested live), because Ethernet's connection state and its
-    physical link are separate — unlike Wi-Fi, deactivating the profile
-    doesn't touch the cable. Some routers only re-evaluate what to hand
-    out on an actual link-down/up, which nothing at the NetworkManager
-    level can trigger without root (`ip link set dev <iface> down`, which
-    this setup intentionally doesn't grant passwordless access to, to
-    avoid adding a new privilege-escalation surface). Two options if it
-    recurs on Ethernet: the **Static IPv4 toggle** (software-only — use
-    the same address it already had, and the gateway Wi-Fi is using on
-    the same subnet, saved as a profile for one-click re-apply), or
-    **physically unplug and replug the cable**, which is the only
-    reliable way to force a real link reset on Ethernet.
-    **Confirmed reliable trigger**: moving the cable to a new network
-    while the profile is still set to Static, then switching it to DHCP
-    *after* the move (rather than unplugging first) — the address and DNS
-    come through fine but the gateway consistently comes back blank, and
-    neither retrying DHCP nor a software `down`/`up` cycle fixes it, only
-    a physical unplug/replug of the cable does. Confirmed this is not a
-    same-subnet-with-Wi-Fi conflict (checked live: Wi-Fi and Ethernet
-    sharing a subnet is fine on its own, each interface just needs its
-    own gateway to build a route from — the actual DHCP lease genuinely
-    came back with `IP4.GATEWAY: --`, no gateway at all, address and DNS
-    populated). Software retry re-requests against the same still-carrier-up
-    link and gets the same incomplete answer; only a real link-down (the
-    physical reseat) prompts the router to send a complete lease.
+**Connection shows "Connected" but Gateway is blank, and you lose all
+network access if the other interface goes down.**
 
-## Repo layout
+This means the DHCP server on the router isn't sending a gateway in that
+lease, so the interface can only reach its own subnet, not the internet.
+It's not something netctl or NetworkManager can detect or fix
+automatically, and the fix differs by interface:
 
-| File | Responsibility |
-|---|---|
-| `manifest.json` | Plugin manifest (id `netctl`, bar-widget) |
-| `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison |
-| `WifiSection.qml` | Wi-Fi status, radio toggle, primary-route control |
-| `EthernetSection.qml` | Ethernet status, connect/disconnect, DHCP/Static form, primary-route control |
-| `StatsGrid.qml` | Shared per-interface ping/throughput/IP/gateway grid |
-| `ProfileList.qml` | Saved static-IP profiles UI + JSON persistence |
-| `WifiScanList.qml` | Nearby-network scan list, join/password prompt, forget |
-| `Model.js` | Pure parsing/formatting/validation helpers (testable under plain `node`) |
-| `docs/plans/` | Implementation plan(s) |
-
-## Development
-
-This repo is symlinked into `~/.config/omarchy/plugins/netctl`, so edits
-here are what the running shell loads. After a change:
-
-```bash
-omarchy restart shell           # clean reload
-omarchy-shell netctl open       # open the popup via IPC
-omarchy capture screenshot fullscreen save
-```
-
-`Model.js`'s pure functions can be smoke-tested directly:
-
-```bash
-node -e 'var M = require("./Model.js"); console.log(M.formatRate(2048))'
-```
+- **Wi-Fi**: disconnect and reconnect the network (toggle the radio off/on,
+  or reconnect from the nearby-networks list). This forces a fresh 802.11
+  association and a new DHCP lease.
+- **Ethernet**: switching back to DHCP from this widget already forces a
+  fresh DHCP request, but some routers only hand out a complete lease on an
+  actual link down/up, which nothing here can trigger without root. Two
+  options: apply a **Static IPv4** profile with an address/gateway you
+  already know are correct, or **physically unplug and replug the cable**.
