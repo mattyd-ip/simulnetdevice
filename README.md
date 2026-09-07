@@ -75,8 +75,9 @@ omarchy plugin enable netctl
   groups, `h`/`l` (or ←/→) move between items in the current group and hop
   to the other column when Wi-Fi and Ethernet are side by side, `Space`/
   `Enter` activates whatever's highlighted, `x` forgets a highlighted
-  Wi-Fi network, `Tab` switches to the next bar widget, and `Escape` closes
-  the popup (or cancels a password/profile-name entry while typing).
+  Wi-Fi network or deletes a highlighted saved Ethernet profile, `Tab`
+  switches to the next bar widget, and `Escape` closes the popup (or
+  cancels a password/profile-name entry while typing).
 
 ## Tested on
 

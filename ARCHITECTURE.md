@@ -11,8 +11,8 @@ see `README.md`; for the dev loop and forward-looking notes see
 | File | Responsibility |
 |---|---|
 | `manifest.json` | Plugin manifest (id `netctl`, bar-widget) |
-| `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison |
-| `WifiSection.qml` | Wi-Fi status, radio toggle, primary-route control, nearby-network list |
+| `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison, owns the keyboard-cursor controller |
+| `WifiSection.qml` | Wi-Fi status, radio toggle, band selection, primary-route control, nearby-network list |
 | `EthernetSection.qml` | Ethernet status, connect/disconnect, DHCP/Static form, primary-route control |
 | `StatsGrid.qml` | Shared per-interface ping/throughput/IP/gateway grid |
 | `ProfileList.qml` | Saved static-IP profiles UI + JSON persistence |
@@ -67,21 +67,47 @@ the file to check first.
 `Panel.qml` owns the only cursor state that exists (`cursorSection`,
 `cursorGroup`, `cursorItem`) and is the only thing that knows both sections
 exist. Each section instead exposes a small, identical interface -- a
-`navGroupIds` list (e.g. Wi-Fi's `["hero", "band", "list"]`, only present
-when actually visible) plus `navGroupCount(id)` / `navActivate(id, item)` /
+`navGroupIds` list plus `navGroupCount(id)` / `navActivate(id, item)` /
 `navDelete(id, item)` -- and receives `cursorActive`/`cursorGroup`/
 `cursorItem` back as plain input properties, with `cursorGroup` arriving as
-`-1` whenever the cursor actually belongs to the other section. Every
-control's own `hasCursor` binding is then just
-`cursorActive && cursorGroup === groupIndex("id") && cursorItem === N`.
-Neither section imports or references the other; `Panel.qml`'s
-`moveCursor(dx, dy)` is the only code that hands the cursor from one
-section's edge to the other's, and it does so differently depending on
-`panel.twoColumn`: `j`/`k` spill into the other section only while stacked
-(single column), `h`/`l` spill into the other section only while side by
-side -- see its own comment for the exact direction rules. Deliberately
-out of scope: mouse hover does not move the keyboard cursor (unlike the
-built-in widget), so the two coexist without needing to be unified.
+`-1` whenever the cursor actually belongs to the other section. Each
+section also computes its own `currentGroupId` (the group name the cursor
+is on, or `""`), so every control's own `hasCursor` binding is just
+`currentGroupId === "id" && cursorItem === N`. Neither section imports or
+references the other.
+
+Groups are vertically-stacked content, navigated with `j`/`k`; items within
+a group are horizontally-adjacent controls, navigated with `h`/`l`. This is
+why the nearby-network list (`WifiSection.qml`) and the saved-profile list
+(`EthernetSection.qml`) each generate one group *per row* (`"network-0"`,
+`"network-1"`, ... and `"profile-0"`, `"profile-1"`, ...) rather than
+packing every row into one group navigated with `h`/`l` -- rows are stacked
+top to bottom, so `j`/`k` is what actually matches how they're laid out.
+Getting this backwards was an actual bug caught during review: it read as
+correct in both cases until it was navigated for real.
+
+`Panel.qml`'s `moveCursor(dx, dy)` is the only code that hands the cursor
+from one section's edge to the other's, and it does so differently
+depending on `panel.twoColumn`: `j`/`k` spill into the other section only
+while stacked (single column), landing on that section's first group when
+moving down or its last group when moving up; `h`/`l` spill into the other
+*column* only while side by side, preferring a group with the same id
+(so leaving "hero" on one side lands on "hero" on the other) and falling
+back to "hero" specifically -- not "whatever group the same numeric index
+happens to be", which landed on the nearby-network list often enough to
+matter, and that list's length changes on its own as background scans
+complete, so "the last row" stopped being the actual last row within
+moments and made crossing back out unreliable. The column crossing also
+picks which item you land on based on which key crossed: `l` (moving
+toward the start) lands on item 0, `h` (moving toward the end) lands on
+the last item -- landing on item 0 unconditionally made `h` overshoot
+straight past a whole row of items. The row crossing (`j`/`k`, stacked
+mode) always lands on item 0 regardless of direction, since a group isn't
+a row with a "near" and "far" end the way items in a group are.
+
+Deliberately out of scope: mouse hover does not move the keyboard cursor
+(unlike the built-in widget), so the two coexist without needing to be
+unified.
 
 ## What's original vs. adapted from `omarchy.network`
 
@@ -116,12 +142,26 @@ worth knowing which side of that line it's on:
 - Ethernet connect/disconnect.
 - All of `EthernetSection.qml`'s status-parsing shell script and retry/
   recovery logic.
+- The keyboard-navigation architecture (`Panel.qml`'s central cursor
+  controller). The built-in widget also has vim-style navigation, but it's
+  one flat `focusSection` state machine over a single network's controls;
+  netctl's two independent, side-by-side-or-stacked sections needed a
+  different shape (a controller that hands a cursor between two sections
+  that stay unaware of each other) rather than anything portable from the
+  built-in's model — see "Keyboard navigation" above.
+
+**Delegates to an existing system tool rather than reimplementing it**:
+Wi-Fi band selection (`WifiSection.qml`) shells out to
+`omarchy-network-band`, the same standalone CLI the built-in widget's own
+band picker uses — neither widget reimplements the `iw`/`nmcli` band-pinning
+logic; this one just polls its status output and forwards clicks to it.
 
 **Framework boilerplate that looks borrowed but isn't**: the
 `Panel { moduleName; ipcTarget; manageIpc: false }` root wiring and the
 `qs.Ui`/`qs.Commons` component set (`PanelSectionHeader`, `PanelToolTip`,
-`BarIconButton`, `IpcHandler`, `KeyboardPanel`, etc.) are conventions every
-Omarchy shell plugin uses, not anything specific to `omarchy.network`.
+`BarIconButton`, `IpcHandler`, `KeyboardPanel`, `PanelKeyCatcher`, etc.) are
+conventions every Omarchy shell plugin uses, not anything specific to
+`omarchy.network`.
 
 ## Invariants worth knowing before you change things
 
@@ -157,3 +197,14 @@ Omarchy shell plugin uses, not anything specific to `omarchy.network`.
   args**, never interpolated into the script string — e.g.
   `applyIpv4Script` takes `addr`/`gw`/`dns` as `$3`/`$4`/`$5`. Keep this
   pattern for any new script that touches user input.
+- **A `TextField` that becomes invisible does not lose `activeFocus`.** Qt
+  Quick only clears focus when something else explicitly claims it — hiding
+  the container isn't enough, and a static-IP apply succeeding collapses
+  the fields asynchronously (in a `Process.onExited` handler) with nothing
+  else ever taking focus back. Any `anyFieldFocused`-style gate must key off
+  the form's own open/closed flag (`manualEntryOpen`, `addingProfile`,
+  `passwordSsid !== ""`), not the field's raw `.activeFocus` alone —
+  otherwise the gate stays stuck true forever on a
+  field nobody can see, and every keypress silently types into it instead
+  of navigating. `Panel.qml`'s key catcher additionally reclaims focus for
+  itself the moment that gate clears, since Qt Quick won't do that either.
