@@ -119,9 +119,23 @@ if a future Omarchy version marks it non-disableable, the fallback text is
 still correct. Dismissal ("Keep both") is a marker file
 (`~/.config/netctl/hide-network-conflict-notice`), not an in-memory flag,
 so choosing to run both is remembered across restarts, not just for one
-session. See the README's "Running alongside the built-in widget" section
-for what the actual conflict is (a shared, non-reference-counted Wi-Fi
-scanner flag) and why everything else both widgets do is safe to overlap.
+session.
+
+There's no real conflict for anything either widget changes on purpose —
+route-metric writes, band pinning, DHCP/Static, connect/disconnect — since
+all of that goes through `nmcli` against NetworkManager's own state, and
+NetworkManager is the single source of truth both widgets just read back;
+neither can leave the other showing stale or contradictory state. The one
+actual exception is Wi-Fi scanning, controlled by
+`WifiDevice.scannerEnabled` — a flag that lives outside NetworkManager
+(it's not a connection setting, just an in-memory scan toggle) and is
+shared by every plugin that touches it, with no reference counting across
+separate plugins. If both popups are open at once, closing one can turn
+scanning off for the other too; this is non-critical for a different
+reason than everything else above — it self-heals the moment either popup
+reopens (which refreshes its own scan state), so at worst you see a stale
+nearby-networks list for a moment, not lost or corrupted state. This is
+the one exception netctl's banner exists to surface at all.
 
 ## What's original vs. adapted from `omarchy.network`
 
