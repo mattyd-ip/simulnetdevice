@@ -17,20 +17,30 @@ The built-in widget is left untouched and can be re-enabled as a fallback
 
 ## Running alongside the built-in widget
 
-You don't have to disable `omarchy.network` to use netctl — both can run at
-the same time without corrupting each other's state, since everything
-either one does goes through `nmcli` against NetworkManager's own state,
-which both just read back. The one real interaction: Wi-Fi scanning is
-controlled by a flag shared by every plugin that touches it, so if both
-popups happen to be open at once, closing one can briefly stop the other's
-scan until it's reopened — not a crash, just a stale nearby-networks list
-for a moment.
+You don't have to disable `omarchy.network` to use netctl — there's no true
+conflict between running both. Everything either widget does to actually
+change something (route-metric writes, band pinning, DHCP/Static, connect/
+disconnect) goes through `nmcli` against NetworkManager's own state, and
+NetworkManager is the single source of truth both widgets just read back —
+neither one can leave the other showing stale or contradictory state.
 
-If `omarchy.network` is still enabled, netctl shows a small banner with a
-"Disable it" button (or the equivalent `omarchy plugin disable
-omarchy.network` command, if you'd rather run it yourself) and a "Keep
-both" button that remembers your choice for good — it won't ask again
-unless you delete `~/.config/netctl/hide-network-conflict-notice`.
+The one exception, and the reason netctl checks at all: Wi-Fi scanning is
+controlled by `WifiDevice.scannerEnabled`, a flag that lives outside
+NetworkManager (it's not a connection setting, just an in-memory scan
+toggle) and is shared by every plugin that touches it, with no reference
+counting across separate plugins. If both popups happen to be open at the
+same time, closing one can turn scanning off for the other too. This is
+still non-critical, just for a different reason than everything else: it
+self-heals the moment either popup reopens (which refreshes its own scan
+state), so at worst you see a stale nearby-networks list for a moment, not
+lost state or bad data.
+
+Because of that one exception, netctl shows a small banner whenever
+`omarchy.network` is still enabled, with a "Disable it" button (or the
+equivalent `omarchy plugin disable omarchy.network` command, if you'd
+rather run it yourself) and a "Keep both" button that remembers your
+choice for good — it won't ask again unless you delete
+`~/.config/netctl/hide-network-conflict-notice`.
 
 ## Installation
 
