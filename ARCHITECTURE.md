@@ -11,7 +11,7 @@ see `README.md`; for the dev loop and forward-looking notes see
 | File | Responsibility |
 |---|---|
 | `manifest.json` | Plugin manifest (id `netctl`, bar-widget) |
-| `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison, owns the keyboard-cursor controller |
+| `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison, owns the keyboard-cursor controller and the `omarchy.network` conflict banner |
 | `WifiSection.qml` | Wi-Fi status, radio toggle, band selection, primary-route control, nearby-network list |
 | `EthernetSection.qml` | Ethernet status, connect/disconnect, DHCP/Static form, primary-route control |
 | `StatsGrid.qml` | Shared per-interface ping/throughput/IP/gateway grid |
@@ -109,6 +109,20 @@ Deliberately out of scope: mouse hover does not move the keyboard cursor
 (unlike the built-in widget), so the two coexist without needing to be
 unified.
 
+**The `omarchy.network` conflict banner checks, it doesn't assume.**
+`Panel.qml` shells out to `omarchy plugin list --json | jq` on every open
+(not polled continuously -- this doesn't change while the popup is up) to
+read the built-in widget's actual `enabled`/`canDisable` state, rather than
+caching a one-time answer or hardcoding an assumption about a typical
+install. `canDisable` gates whether the "Disable it" button even appears --
+if a future Omarchy version marks it non-disableable, the fallback text is
+still correct. Dismissal ("Keep both") is a marker file
+(`~/.config/netctl/hide-network-conflict-notice`), not an in-memory flag,
+so choosing to run both is remembered across restarts, not just for one
+session. See the README's "Running alongside the built-in widget" section
+for what the actual conflict is (a shared, non-reference-counted Wi-Fi
+scanner flag) and why everything else both widgets do is safe to overlap.
+
 ## What's original vs. adapted from `omarchy.network`
 
 netctl started as a clone of the built-in `omarchy.network` widget and
@@ -149,6 +163,8 @@ worth knowing which side of that line it's on:
   different shape (a controller that hands a cursor between two sections
   that stay unaware of each other) rather than anything portable from the
   built-in's model — see "Keyboard navigation" above.
+- The `omarchy.network` conflict banner. The built-in widget has no
+  equivalent — it has no reason to check for netctl's existence.
 
 **Delegates to an existing system tool rather than reimplementing it**:
 Wi-Fi band selection (`WifiSection.qml`) shells out to

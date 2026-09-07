@@ -161,7 +161,72 @@ Panel {
       root.cursorSection = "wifi"
       root.cursorGroup = 0
       root.cursorItem = 0
+    } else {
+      root.refreshConflictCheck()
     }
+  }
+
+  // ---------- omarchy.network conflict notice ----------
+  // The one real conflict between running both widgets at once: Wi-Fi
+  // scanning is controlled by `WifiDevice.scannerEnabled`, a single flag
+  // shared by every plugin that touches it, with no reference counting
+  // across plugin instances (see WifiScanList.qml's identical comment, and
+  // the built-in widget's own -- same design, same limitation). If both
+  // popups are open together, whichever one closes first turns scanning
+  // off for the other too, until it's reopened. Everything else either
+  // widget does (route-metric writes, band pinning, status polling) goes
+  // through nmcli against NetworkManager's own state, which is the single
+  // source of truth both just read back -- no actual corruption risk there.
+  property var conflictInfo: ({})
+  readonly property bool conflictNoticeDismissed: conflictInfo.dismissed === "1"
+  readonly property bool showConflictNotice: conflictInfo.enabled === "true" && !root.conflictNoticeDismissed
+  readonly property bool conflictCanDisable: conflictInfo.canDisable === "true"
+
+  readonly property string conflictCheckScript:
+    "enabled=$(omarchy plugin list --json | jq -r '.[] | select(.id==\"omarchy.network\") | .enabled')\n" +
+    "can_disable=$(omarchy plugin list --json | jq -r '.[] | select(.id==\"omarchy.network\") | .canDisable')\n" +
+    "dismissed=0\n" +
+    "[[ -f \"$HOME/.config/netctl/hide-network-conflict-notice\" ]] && dismissed=1\n" +
+    "printf 'enabled\\t%s\\n' \"${enabled:-false}\"\n" +
+    "printf 'canDisable\\t%s\\n' \"${can_disable:-false}\"\n" +
+    "printf 'dismissed\\t%s\\n' \"$dismissed\"\n"
+
+  function refreshConflictCheck() {
+    if (conflictCheckProc.running) return
+    conflictCheckProc.command = ["bash", "-c", root.conflictCheckScript]
+    conflictCheckProc.running = true
+  }
+
+  Process {
+    id: conflictCheckProc
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.conflictInfo = Model.parseKeyValue(text) }
+  }
+
+  function disableNetworkWidget() {
+    if (disableNetworkProc.running) return
+    disableNetworkProc.command = ["omarchy", "plugin", "disable", "omarchy.network"]
+    disableNetworkProc.running = true
+  }
+
+  Process {
+    id: disableNetworkProc
+    onExited: root.refreshConflictCheck()
+  }
+
+  // "Keep both" -- remembered permanently (not just for this session), so
+  // choosing to run both deliberately doesn't mean seeing this banner on
+  // every single open. Nothing else in netctl reads this marker; deleting
+  // ~/.config/netctl/hide-network-conflict-notice brings the notice back.
+  function dismissConflictNotice() {
+    if (dismissConflictProc.running) return
+    dismissConflictProc.command = ["bash", "-c",
+      "mkdir -p \"$HOME/.config/netctl\" && touch \"$HOME/.config/netctl/hide-network-conflict-notice\""]
+    dismissConflictProc.running = true
+  }
+
+  Process {
+    id: dismissConflictProc
+    onExited: root.refreshConflictCheck()
   }
 
   IpcHandler {
@@ -205,7 +270,7 @@ Panel {
     readonly property bool twoColumn: wifiSection.isConnected && ethernetSection.isConnected
 
     contentWidth: panel.fittedContentWidth(panel.twoColumn ? panel.columnWidth * 2 + panel.columnGap : panel.columnWidth)
-    contentHeight: panel.fittedContentHeight(sectionsGrid.implicitHeight)
+    contentHeight: panel.fittedContentHeight(popupColumn.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -226,64 +291,141 @@ Panel {
       onActivateRequested: root.activateCursor()
       onDeleteRequested: root.deleteCursor()
 
-      // A Grid, not a Column: switching `columns` between 1 and 2 gives us
-      // the single-stack and side-by-side layouts from the same two section
-      // instances, with no duplication or manual reparenting. Positioners
-      // skip invisible children entirely, so the separator below drops out
-      // of the flow on its own in two-column mode instead of leaving a gap.
-      Grid {
-        id: sectionsGrid
+      Column {
+        id: popupColumn
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        columns: panel.twoColumn ? 2 : 1
-        columnSpacing: panel.columnGap
-        rowSpacing: Style.space(16)
+        spacing: Style.space(12)
 
-        WifiSection {
-          id: wifiSection
-          width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
-          bar: root.bar
-          opened: root.opened
-          // Cross-wired so each section's "Set primary" reflects the real
-          // comparison against the other's actual metric, not a guess --
-          // but only while the other is actually connected. A disabled
-          // interface's last-saved metric is stale and shouldn't get to
-          // outrank the one interface that's actually up: Model.isPrimary
-          // already treats a non-finite compare value as "nothing to
-          // compete with, so I'm primary by default" -- undefined here (not
-          // ethernetSection.routeMetric) is what triggers that.
-          primaryCompareMetric: ethernetSection.isConnected ? ethernetSection.routeMetric : undefined
-          onRouteMetricApplied: ethernetSection.setRouteMetric(Model.SECONDARY_METRIC)
-          // Let the nearby-networks list grow to match Ethernet's height in
-          // two-column mode -- Ethernet's own height never depends on
-          // Wi-Fi's, so this direction is safe from binding loops.
-          stretchTargetHeight: panel.twoColumn ? ethernetSection.implicitHeight : 0
-          // -1 whenever the cursor belongs to the other section, so every
-          // hasCursor binding inside WifiSection naturally reads false.
-          cursorActive: root.cursorActive
-          cursorGroup: root.cursorSection === "wifi" ? root.cursorGroup : -1
-          cursorItem: root.cursorItem
+        Rectangle {
+          id: conflictBanner
+          visible: root.showConflictNotice
+          width: parent.width
+          height: visible ? bannerContent.implicitHeight + Style.space(16) : 0
+          radius: Style.cornerRadius
+          color: Style.hoverFillFor(root.bar.foreground, Color.accent)
+          clip: true
+
+          Column {
+            id: bannerContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.margins: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              textFormat: Text.PlainText
+              text: "The built-in Network widget is also enabled. Running both at once can briefly stop Wi-Fi scanning in whichever popup you leave open, since they share one scan toggle."
+              wrapMode: Text.WordWrap
+              width: parent.width
+              color: root.bar.foreground
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Row {
+              spacing: Style.space(8)
+
+              Button {
+                text: "Disable it"
+                visible: root.conflictCanDisable
+                fontSize: Style.font.bodySmall
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                horizontalPadding: Style.spacing.controlPaddingX
+                verticalPadding: Style.spacing.controlPaddingY
+                bordered: true
+                onClicked: root.disableNetworkWidget()
+              }
+
+              Button {
+                text: "Keep both"
+                fontSize: Style.font.bodySmall
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                horizontalPadding: Style.spacing.controlPaddingX
+                verticalPadding: Style.spacing.controlPaddingY
+                bordered: true
+                onClicked: root.dismissConflictNotice()
+              }
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              text: root.conflictCanDisable
+                ? "Or from a terminal: omarchy plugin disable omarchy.network"
+                : "This system won't let plugins disable it from here -- from a terminal: omarchy plugin disable omarchy.network"
+              wrapMode: Text.WordWrap
+              width: parent.width
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+          }
         }
 
-        PanelSeparator {
-          visible: !panel.twoColumn
-          width: sectionsGrid.width
-          foreground: root.bar.foreground
-        }
+        // A Grid, not a Column: switching `columns` between 1 and 2 gives
+        // us the single-stack and side-by-side layouts from the same two
+        // section instances, with no duplication or manual reparenting.
+        // Positioners skip invisible children entirely, so the separator
+        // below drops out of the flow on its own in two-column mode
+        // instead of leaving a gap.
+        Grid {
+          id: sectionsGrid
+          width: parent.width
+          columns: panel.twoColumn ? 2 : 1
+          columnSpacing: panel.columnGap
+          rowSpacing: Style.space(16)
 
-        EthernetSection {
-          id: ethernetSection
-          width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
-          bar: root.bar
-          opened: root.opened
-          // See WifiSection's identical comment.
-          primaryCompareMetric: wifiSection.isConnected ? wifiSection.routeMetric : undefined
-          onRouteMetricApplied: wifiSection.setRouteMetric(Model.SECONDARY_METRIC)
-          // See WifiSection's identical comment.
-          cursorActive: root.cursorActive
-          cursorGroup: root.cursorSection === "ethernet" ? root.cursorGroup : -1
-          cursorItem: root.cursorItem
+          WifiSection {
+            id: wifiSection
+            width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
+            bar: root.bar
+            opened: root.opened
+            // Cross-wired so each section's "Set primary" reflects the
+            // real comparison against the other's actual metric, not a
+            // guess -- but only while the other is actually connected. A
+            // disabled interface's last-saved metric is stale and
+            // shouldn't get to outrank the one interface that's actually
+            // up: Model.isPrimary already treats a non-finite compare
+            // value as "nothing to compete with, so I'm primary by
+            // default" -- undefined here (not ethernetSection.routeMetric)
+            // is what triggers that.
+            primaryCompareMetric: ethernetSection.isConnected ? ethernetSection.routeMetric : undefined
+            onRouteMetricApplied: ethernetSection.setRouteMetric(Model.SECONDARY_METRIC)
+            // Let the nearby-networks list grow to match Ethernet's height
+            // in two-column mode -- Ethernet's own height never depends on
+            // Wi-Fi's, so this direction is safe from binding loops.
+            stretchTargetHeight: panel.twoColumn ? ethernetSection.implicitHeight : 0
+            // -1 whenever the cursor belongs to the other section, so
+            // every hasCursor binding inside WifiSection naturally reads
+            // false.
+            cursorActive: root.cursorActive
+            cursorGroup: root.cursorSection === "wifi" ? root.cursorGroup : -1
+            cursorItem: root.cursorItem
+          }
+
+          PanelSeparator {
+            visible: !panel.twoColumn
+            width: sectionsGrid.width
+            foreground: root.bar.foreground
+          }
+
+          EthernetSection {
+            id: ethernetSection
+            width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
+            bar: root.bar
+            opened: root.opened
+            // See WifiSection's identical comment.
+            primaryCompareMetric: wifiSection.isConnected ? wifiSection.routeMetric : undefined
+            onRouteMetricApplied: wifiSection.setRouteMetric(Model.SECONDARY_METRIC)
+            // See WifiSection's identical comment.
+            cursorActive: root.cursorActive
+            cursorGroup: root.cursorSection === "ethernet" ? root.cursorGroup : -1
+            cursorItem: root.cursorItem
+          }
         }
       }
     }

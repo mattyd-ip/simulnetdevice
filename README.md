@@ -15,6 +15,23 @@ no matter which one is carrying the default route.
 The built-in widget is left untouched and can be re-enabled as a fallback
 (`omarchy plugin enable omarchy.network`) if this one ever breaks.
 
+## Running alongside the built-in widget
+
+You don't have to disable `omarchy.network` to use netctl — both can run at
+the same time without corrupting each other's state, since everything
+either one does goes through `nmcli` against NetworkManager's own state,
+which both just read back. The one real interaction: Wi-Fi scanning is
+controlled by a flag shared by every plugin that touches it, so if both
+popups happen to be open at once, closing one can briefly stop the other's
+scan until it's reopened — not a crash, just a stale nearby-networks list
+for a moment.
+
+If `omarchy.network` is still enabled, netctl shows a small banner with a
+"Disable it" button (or the equivalent `omarchy plugin disable
+omarchy.network` command, if you'd rather run it yourself) and a "Keep
+both" button that remembers your choice for good — it won't ask again
+unless you delete `~/.config/netctl/hide-network-conflict-notice`.
+
 ## Installation
 
 ```bash
