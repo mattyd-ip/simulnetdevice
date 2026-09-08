@@ -31,64 +31,22 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 
 ## 2026-09-08T13:25:56-04:00
 
+Prepared for submission to the Omarchy plugin marketplace.
+
 ### Added
 
 - A bug report issue template, with the exact terminal commands to gather
   the version, network state, and debug log a report needs
-  ([`392f2d2`](https://github.com/mattyd-ip/simulnetdevice/commit/392f2d2)).
+  ([`9a14780`](https://github.com/mattyd-ip/simulnetdevice/commit/9a14780)).
+- README: Uninstall instructions and a dependency list
+  ([`9a14780`](https://github.com/mattyd-ip/simulnetdevice/commit/9a14780)).
+- README discloses the fixed ping target (`1.1.1.1`, one ICMP echo per
+  status refresh per interface) used for latency/packet-loss
+  ([`e4869a4`](https://github.com/mattyd-ip/simulnetdevice/commit/e4869a4),
+  [`653e392`](https://github.com/mattyd-ip/simulnetdevice/commit/653e392)).
 
 ### Changed
 
-- README: added Uninstall instructions and a dependency list, filling
-  gaps in the plugin marketplace's submission checklist
-  ([`392f2d2`](https://github.com/mattyd-ip/simulnetdevice/commit/392f2d2)).
-
-## 2026-09-08T13:32:01-04:00
-
-### Fixed
-
-- Cleaned up outdated comments in `Makefile` and the CI workflow
-  ([`db6162a`](https://github.com/mattyd-ip/simulnetdevice/commit/db6162a)).
-
-### Changed
-
-- README now points its screenshot at the root `preview.png` instead of
-  a byte-identical `docs/img/popup-expanded.png`, removing a duplicate
-  that had to be kept in sync by hand
-  ([`c7c6334`](https://github.com/mattyd-ip/simulnetdevice/commit/c7c6334)).
-
-## 2026-09-08T14:05:03-04:00
-
-### Added
-
-- README now discloses the fixed ping target (`1.1.1.1`, one ICMP echo
-  per status refresh per interface) used for latency/packet-loss
-  ([`3c1ed38`](https://github.com/mattyd-ip/simulnetdevice/commit/3c1ed38)).
-
-## 2026-09-08T14:17:22-04:00
-
-### Changed
-
-- Tightened the wording of the README's connectivity-check note
-  ([`cb7b05d`](https://github.com/mattyd-ip/simulnetdevice/commit/cb7b05d)).
-
-## 2026-09-08T15:16:45-04:00
-
-### Removed
-
-- Stopped tracking `CLAUDE.md` and `.githooks/`
-  ([`e50ee4d`](https://github.com/mattyd-ip/simulnetdevice/commit/e50ee4d),
-  [`ac41f51`](https://github.com/mattyd-ip/simulnetdevice/commit/ac41f51)).
-
-### Changed
-
-- Replaced ARCHITECTURE.md's "Development setup" section with a shorter
-  testing note
-  ([`6768163`](https://github.com/mattyd-ip/simulnetdevice/commit/6768163)).
-
-## 2026-09-08T15:18:54-04:00
-
-### Changed
-
-- Trimmed `.gitignore` to generic patterns only
-  ([`8fbc861`](https://github.com/mattyd-ip/simulnetdevice/commit/8fbc861)).
+- README's screenshot now points at a single root-level `preview.png`
+  instead of a duplicate copy
+  ([`497f9b9`](https://github.com/mattyd-ip/simulnetdevice/commit/497f9b9)).
