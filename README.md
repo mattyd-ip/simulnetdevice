@@ -48,6 +48,20 @@ git clone https://github.com/mattyd-ip/simulnetdevice ~/.config/omarchy/plugins/
 omarchy plugin enable simulnetdevice
 ```
 
+**Requires:** NetworkManager (`nmcli`), `jq`, and `ping` — all present on a
+stock Omarchy install.
+
+## Uninstall
+
+```bash
+omarchy plugin remove simulnetdevice
+```
+
+This disables and removes the plugin (backing up the folder first if it
+wasn't a git checkout). It leaves `~/.config/simulnetdevice/` — saved
+static-IP profiles and the "keep both" conflict-banner preference — in
+place; add `rm -rf ~/.config/simulnetdevice` to also clear those.
+
 ## Current features
 
 - **Independent Wi-Fi + Ethernet, live and side by side** — connection

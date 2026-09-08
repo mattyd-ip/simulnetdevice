@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a problem with SimulNetDevice.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. The commands below collect the
+        information needed to diagnose most issues — run them and paste the
+        output in rather than describing it from memory.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you expected instead, and the steps to reproduce it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot or recording
+      description: |
+        Drag and drop an image or short recording of the problem here — this
+        is often worth more than a description. Capture one with:
+
+        ```bash
+        omarchy capture screenshot fullscreen save
+        # or, for a short recording:
+        omarchy screenrecord --fullscreen
+        omarchy screenrecord --stop-recording
+        ```
+
+  - type: textarea
+    id: omarchy-version
+    attributes:
+      label: Omarchy version and debug log
+      description: |
+        Run and paste the output — this also covers shell warnings/errors
+        for the current boot, useful if the popup fails to open or behaves
+        oddly:
+
+        ```bash
+        omarchy version
+        omarchy debug --no-sudo --print
+        ```
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: plugin-version
+    attributes:
+      label: SimulNetDevice version and install method
+      description: |
+        The `version` from your installed manifest, and how you installed it
+        (`omarchy plugin add`, or a manual git clone):
+
+        ```bash
+        jq -r '.version' ~/.config/omarchy/plugins/simulnetdevice/manifest.json
+        ```
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: network-state
+    attributes:
+      label: Network device and connection state
+      description: |
+        Run and paste the output — this covers most Wi-Fi/Ethernet/DHCP
+        issues on its own:
+
+        ```bash
+        nmcli device status
+        nmcli -t -f GENERAL,IP4,IP6 device show
+        nmcli connection show
+        ```
+      render: text
+    validations:
+      required: true
