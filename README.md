@@ -34,13 +34,13 @@ why.
 ## Installation
 
 ```bash
-omarchy plugin add <this-repo's-git-url> --enable
+omarchy plugin add https://github.com/mattyd-ip/simulnetdevice --enable
 ```
 
 Or, from a local clone:
 
 ```bash
-git clone <this-repo's-git-url> ~/.config/omarchy/plugins/simulnetdevice
+git clone https://github.com/mattyd-ip/simulnetdevice ~/.config/omarchy/plugins/simulnetdevice
 omarchy plugin enable simulnetdevice
 ```
 

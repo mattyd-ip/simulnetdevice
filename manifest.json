@@ -3,7 +3,7 @@
   "id": "simulnetdevice",
   "name": "SimulNetDevice",
   "version": "0.1.0",
-  "author": "sweetshub",
+  "author": "mattyd-ip",
   "license": "MIT",
   "description": "Shows Wi-Fi and Ethernet status at the same time, with saved static IP profiles and primary-interface routing control.",
   "kinds": ["bar-widget"],
