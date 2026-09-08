@@ -3,6 +3,10 @@
 An Omarchy (Quickshell) plugin for managing Wi-Fi and Ethernet
 independently, at the same time.
 
+**Static IPv4 expanded**
+
+![SimulNetDevice popup showing both Wi-Fi and Ethernet sections live side by side, with the Ethernet Static IPv4 panel expanded to show saved profiles and the manual address/gateway/DNS entry fields](docs/img/popup-expanded.png)
+
 ## Why this exists
 
 The built-in `omarchy.network` plugin only ever reports on whichever

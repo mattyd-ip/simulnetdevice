@@ -616,57 +616,64 @@ Item {
       width: parent.width
       spacing: Style.space(10)
 
-      PanelSectionHeader {
-        text: "ETHERNET IPV4 CONFIGURATION"
-        foreground: root.bar.foreground
-        fontFamily: root.bar.fontFamily
-      }
-
-      Text {
-        textFormat: Text.PlainText
-        visible: !root.hasProfile
-        text: "Plug in a cable once so NetworkManager can create a wired profile."
-        color: Qt.darker(root.bar.foreground, 1.4)
-        font.family: root.bar.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        wrapMode: Text.WordWrap
-        width: parent.width
-      }
-
-      // DHCP/Static buttons; always visible.
-      Row {
-        visible: root.hasProfile
+      // Header + DHCP/Static row, spaced to match WifiSection's band-selector
+      // block (see bandSection).
+      Column {
         width: parent.width
         spacing: Style.space(6)
 
-        readonly property real cellWidth: (width - spacing) / 2
-
-        Button {
-          text: "DHCP"
-          fontSize: Style.font.bodySmall
+        PanelSectionHeader {
+          text: "ETHERNET IPV4 CONFIGURATION"
           foreground: root.bar.foreground
           fontFamily: root.bar.fontFamily
-          horizontalPadding: Style.spacing.controlPaddingX
-          verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-          bordered: true
-          width: parent.cellWidth
-          active: root.formMode === "auto"
-          hasCursor: root.currentGroupId === "mode" && root.cursorItem === 0
-          onClicked: root.selectMode("auto")
         }
 
-        Button {
-          text: "Static"
-          fontSize: Style.font.bodySmall
-          foreground: root.bar.foreground
-          fontFamily: root.bar.fontFamily
-          horizontalPadding: Style.spacing.controlPaddingX
-          verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
-          bordered: true
-          width: parent.cellWidth
-          active: root.formMode === "manual"
-          hasCursor: root.currentGroupId === "mode" && root.cursorItem === 1
-          onClicked: root.selectMode("manual")
+        Text {
+          textFormat: Text.PlainText
+          visible: !root.hasProfile
+          text: "Plug in a cable once so NetworkManager can create a wired profile."
+          color: Qt.darker(root.bar.foreground, 1.4)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          wrapMode: Text.WordWrap
+          width: parent.width
+        }
+
+        // DHCP/Static buttons; always visible.
+        Row {
+          visible: root.hasProfile
+          width: parent.width
+          spacing: Style.space(6)
+
+          readonly property real cellWidth: (width - spacing) / 2
+
+          Button {
+            text: "DHCP"
+            fontSize: Style.font.bodySmall
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+            bordered: true
+            width: parent.cellWidth
+            active: root.formMode === "auto"
+            hasCursor: root.currentGroupId === "mode" && root.cursorItem === 0
+            onClicked: root.selectMode("auto")
+          }
+
+          Button {
+            text: "Static"
+            fontSize: Style.font.bodySmall
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            horizontalPadding: Style.spacing.controlPaddingX
+            verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+            bordered: true
+            width: parent.cellWidth
+            active: root.formMode === "manual"
+            hasCursor: root.currentGroupId === "mode" && root.cursorItem === 1
+            onClicked: root.selectMode("manual")
+          }
         }
       }
 
