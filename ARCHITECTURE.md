@@ -3,8 +3,7 @@
 Orientation for anyone reviewing or extending this codebase — how it's put
 together, what's original vs. adapted from elsewhere, and the non-obvious
 invariants worth knowing before touching a given file. For end-user docs
-see `README.md`; for the dev loop and forward-looking notes see
-`DEVELOPMENT.md`.
+see `README.md`.
 
 ## Repo layout
 
@@ -18,7 +17,6 @@ see `README.md`; for the dev loop and forward-looking notes see
 | `ProfileList.qml` | Saved static-IP profiles UI + JSON persistence |
 | `WifiScanList.qml` | Nearby-network scan list, join/password prompt, forget |
 | `Model.js` | Pure parsing/formatting/validation helpers (testable under plain `node`) |
-| `docs/plans/` | Implementation plan(s) |
 
 ## Design overview
 
@@ -37,8 +35,7 @@ route-metric coordinator. Each section exposes `routeMetric`, `isPrimary`
 directly: each one's `primaryCompareMetric` is bound to the other's live
 `routeMetric`, and each one's `onRouteMetricApplied` calls
 `setRouteMetric(SECONDARY_METRIC)` on the other, by id. This does not
-generalize to more than two interfaces without a rewrite (see
-`DEVELOPMENT.md`'s multi-NIC notes).
+generalize to more than two interfaces without a rewrite.
 
 **Per-instance state, not singletons.** Each section is a normal QML
 component instance rather than a global/singleton, so its `info`,
@@ -97,8 +94,6 @@ Mouse hover does not move the keyboard cursor.
    through to an error. `cancelInFlightApply()` lets a fresh explicit
    click pre-empt whichever of these is mid-flight.
 
-See `DEVELOPMENT.md` for the testing status of both mechanisms.
-
 **The `omarchy.network` conflict banner checks live state on each open.**
 `Panel.qml` shells out to `omarchy plugin list --json | jq` every time the
 popup opens to read the built-in plugin's `enabled`/`canDisable` state.
@@ -123,7 +118,7 @@ worth knowing which side of that line it's on:
 **Lifted essentially unchanged** from the built-in plugin's `Panel.qml`:
 - `findDevice(type)` in both `WifiSection.qml` and `EthernetSection.qml` —
   picks the connected device of a given `DeviceType`, else the
-  first-enumerated one (see `DEVELOPMENT.md`'s multi-NIC notes).
+  first-enumerated one.
 - The Wi-Fi scan-list per-row action state machine in `WifiScanList.qml`
   (`networkForSsid`, `wifiIndexForSsid`, `runNetworkAction`,
   `clearNetworkAction`, `failNetworkAction`, `checkActionCompletion`).
