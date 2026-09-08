@@ -20,7 +20,7 @@ jobs:
       # Model.js's pure functions need nothing but node, so that's what
       # runs here.
       #
-      # Two gates stay local instead (see DEVELOPMENT.md / `make validate`):
+      # Two gates stay local instead (`make validate` runs both):
       # qmllint needs the Omarchy shell's qs.Ui / qs.Commons on its import
       # path, and `omarchy plugin validate` needs the omarchy CLI itself --
       # neither exists on a plain runner, so running them here would just
