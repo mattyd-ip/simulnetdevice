@@ -47,8 +47,7 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 
 ### Fixed
 
-- Removed stale `DEVELOPMENT.md` pointers left in `Makefile` and CI
-  comments -- that file isn't part of this repo
+- Cleaned up outdated comments in `Makefile` and the CI workflow
   ([`db6162a`](https://github.com/mattyd-ip/simulnetdevice/commit/db6162a)).
 
 ### Changed
@@ -70,6 +69,5 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 
 ### Changed
 
-- Reworded the connectivity-check note to state only current behavior,
-  removing a phrase that hinted at planned work
+- Tightened the wording of the README's connectivity-check note
   ([`cb7b05d`](https://github.com/mattyd-ip/simulnetdevice/commit/cb7b05d)).
