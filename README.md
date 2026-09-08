@@ -46,61 +46,36 @@ omarchy plugin enable simulnetdevice
 
 ## Current features
 
-- **Independent Wi-Fi + Ethernet sections**, each showing live status at the
-  same time: connection state, SSID/link speed, IP address, gateway, ping,
-  packet loss, and download/upload rate + totals — tracked separately per
-  interface, not shared from one default-route sample. They lay out as two
-  side-by-side columns while both are actually connected, dropping back to
-  a single stacked column the moment either one isn't (so an idle,
-  disconnected side doesn't keep holding onto half the popup).
-- **Set primary** — choose which connected network handles your internet
-  traffic, instead of NetworkManager's built-in wired-beats-wireless
-  default.
+- **Independent Wi-Fi + Ethernet, live and side by side** — connection
+  state, SSID/link speed, IP, gateway, ping, packet loss, and
+  download/upload rate + totals, tracked separately per interface rather
+  than shared from one default-route sample. Both show as side-by-side
+  columns while both are connected, dropping to a single column the
+  moment either one isn't.
+- **Set primary** — choose which connected network actually carries your
+  internet traffic, instead of NetworkManager's built-in
+  wired-always-wins default. Lets Wi-Fi stay primary with a cable
+  plugged in, or vice versa.
+- **Saved static-IP profiles (Ethernet)** — name an address/gateway/DNS
+  combo once (e.g. "Office LAN") and reapply it with one click later
+  instead of retyping it. Click "Static" to reveal your saved profiles;
+  picking one applies immediately. The active profile's name stays
+  visible under the Static button even when the panel is collapsed.
+  Stored at `~/.config/simulnetdevice/profiles.json`.
+- **DHCP / Static IPv4 toggle** for Ethernet.
+- **Wi-Fi scanning, joining, and forgetting** — a scrollable list of
+  nearby networks sorted connected/known-first, a password prompt when
+  one's needed, and a forget button for saved networks.
 - **Wi-Fi radio on/off** toggle.
-- **Wi-Fi band selection** — pin the connection to 2.4/5/6GHz or leave it on
-  Auto; only offered when the network actually answers on more than one
-  band. The live band always shows next to the network name regardless.
+- **Wi-Fi band selection** — pin to 2.4/5/6GHz or leave on Auto, offered
+  when a network answers on more than one band.
 - **Ethernet connect/disconnect** toggle.
-- **DHCP / Static IPv4 toggle for Ethernet**. The DHCP/Static buttons
-  themselves are always visible; clicking "Static" is what opens the
-  fields below (saved profiles, "Enter manually…"), and clicking "Static"
-  again — or closing the popup — is what tucks them back away. If a
-  static profile is actually applied, its name stays visible right under
-  the buttons even while the fields are closed. Static mode leads with
-  your saved profiles rather than raw fields — the address/gateway/DNS
-  entry fields stay hidden behind an "Enter manually…" button, reserved
-  for typing a brand-new config or editing one, since applying a saved
-  profile never needs them.
-- **Saved static-IP profiles** — name a set of address/gateway/DNS values
-  once (e.g. "Office LAN") and re-apply it later with one click (applies
-  immediately — no need to open the manual-entry fields) instead of
-  retyping it every time you're back on a network that needs a fixed IP.
-  Stored at `~/.config/simulnetdevice/profiles.json`, separate from this repo.
-  Whichever profile matches the currently-applied config shows right
-  under the DHCP/Static buttons (e.g. "homelab-management"), visible even
-  with the fields collapsed.
-- **Wi-Fi network scanning, joining, and forgetting** — nearby networks
-  (sorted connected/known-first, then by signal), a password prompt for
-  networks that need one, a lock icon for anything requiring credentials,
-  and a forget button for saved networks. The list shows about 4 rows at a
-  time and scrolls for the rest (the section header shows the total count),
-  so a dense area with dozens of visible networks doesn't blow out the
-  popup.
-- **Automatic recovery from a stuck connection** — if ping loss to the
-  internet is sustained rather than a one-off blip, Wi-Fi cycles its radio
-  off and back on and Ethernet disconnects and reconnects (the same fix
-  you'd do by hand), each with a cooldown afterward so a condition this
-  can't actually fix doesn't turn into repeated flapping. Separately, an
-  Ethernet Apply that fails because the cable isn't plugged in yet retries
-  automatically the moment it is, and a failure with the cable already
-  present gets a few automatic retries before showing a real error.
-- **Full keyboard navigation** — `j`/`k` (or ↓/↑) move between control
-  groups, `h`/`l` (or ←/→) move between items in the current group and hop
-  to the other column when Wi-Fi and Ethernet are side by side, `Space`/
-  `Enter` activates whatever's highlighted, `x` forgets a highlighted
-  Wi-Fi network or deletes a highlighted saved Ethernet profile, `Tab`
-  switches to the next plugin, and `Escape` closes the popup (or
-  cancels a password/profile-name entry while typing).
+- **Automatic recovery from a stuck connection** — sustained ping loss
+  cycles the Wi-Fi radio or Ethernet link automatically, the same fix
+  you'd do by hand.
+- **Full keyboard navigation** — `j`/`k`/`h`/`l` (or arrows) to move,
+  `Space`/`Enter` to activate, `x` to forget/delete, `Tab` to switch
+  plugins, `Escape` to close.
 
 ## Tested on
 

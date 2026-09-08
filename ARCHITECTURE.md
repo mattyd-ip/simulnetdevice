@@ -248,6 +248,24 @@ conventions every Omarchy shell plugin uses, not anything specific to
   itself if they don't match. If you add a new cancellable action, wire it
   through this counter too, or a stale exit can silently clobber newer
   state.
+- **`staticPanelOpen` and `manualEntryOpen` are two separate disclosure
+  states, not one.** The DHCP/Static buttons are always visible; clicking
+  "Static" flips `staticPanelOpen`, revealing the saved-profiles list
+  (`ProfileList.qml`) below it, and clicking it again — or closing the
+  popup — collapses that back. `manualEntryOpen` is nested one level
+  deeper, behind its own "Enter manually…" button inside the static
+  panel, reserved for typing a brand-new address/gateway/DNS config or
+  editing one — applying an existing saved profile never opens it. If a
+  static profile is currently applied, its name stays visible under the
+  buttons even while `staticPanelOpen` is false, so users don't need to
+  reopen the panel just to confirm what's active.
+- **The nearby-network list is a `ListView`, not a `Repeater`, specifically
+  to stay cheap at `visibleRowCount` rows (~4) with the rest reached by
+  scrolling.** (`WifiScanList.qml`.) Capping height and clipping a plain
+  `Column`/`Repeater` would still instantiate every delegate up front;
+  `ListView` only realizes rows near the viewport, which matters once a
+  dense area has dozens of visible networks. The section header shows the
+  total count separately from what's currently scrolled into view.
 - **Static-IP fields are set imperatively, not via a `text:` binding.**
   Typing in a `TextField` permanently severs a declarative binding on that
   property, so `seedStaticFields()` writes `addressInput.text = ...`
