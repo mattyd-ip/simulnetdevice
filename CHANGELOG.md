@@ -42,3 +42,18 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 - README: added Uninstall instructions and a dependency list, filling
   gaps in the plugin marketplace's submission checklist
   ([`392f2d2`](https://github.com/mattyd-ip/simulnetdevice/commit/392f2d2)).
+
+## 2026-09-08T13:32:01-04:00
+
+### Fixed
+
+- Removed stale `DEVELOPMENT.md` pointers left in `Makefile` and CI
+  comments -- that file isn't part of this repo
+  ([`db6162a`](https://github.com/mattyd-ip/simulnetdevice/commit/db6162a)).
+
+### Changed
+
+- README now points its screenshot at the root `preview.png` instead of
+  a byte-identical `docs/img/popup-expanded.png`, removing a duplicate
+  that had to be kept in sync by hand
+  ([`c7c6334`](https://github.com/mattyd-ip/simulnetdevice/commit/c7c6334)).
