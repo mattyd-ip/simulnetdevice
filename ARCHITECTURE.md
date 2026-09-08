@@ -107,6 +107,36 @@ Deliberately out of scope: mouse hover does not move the keyboard cursor
 (unlike the built-in plugin), so the two coexist without needing to be
 unified.
 
+**Two self-recovery mechanisms exist beyond passive status reporting.**
+
+1. *Sustained ping-loss recovery.* `StatsGrid.qml` emits `sustainedPacketLoss()`
+   only when `Model.isSustainedPingLoss()` sees the most recent 5 samples
+   (~15s) *all* lost -- deliberately not the same signal as the whole-window
+   `pingPacketLossPercent` used for the red/urgent color, since that lags
+   real recovery by up to ~72s and would fire the recovery far too eagerly
+   on a single blip. `WifiSection.qml` responds with a genuine radio
+   off -> 1.5s -> on cycle; `EthernetSection.qml` responds with a
+   disconnect -> reconnect chain through the section's existing
+   `actionProc`/`pendingAction` machinery (`recoveryPhase`: `"" |
+   "disconnecting" | "connecting"`). Both sides guard against re-triggering
+   mid-recovery and enforce a cooldown after any attempt (success or
+   failure), so a condition this can't actually fix doesn't turn into a
+   permanently flapping interface.
+2. *Ethernet apply retry.* When an Apply/DHCP/Static action fails,
+   `EthernetSection.qml` distinguishes two causes. No cable at all sets
+   `retryActionOnCarrier` and waits indefinitely for `hasCable` to flip
+   true before retrying once, automatically. Cable already present but the
+   attempt still failed (NetworkManager not yet settled right after a
+   prior failure, observed live) gets a bounded retry instead --
+   `maxApplyRetries` (3) on a 2-second `applyRetryTimer` -- falling through
+   to a real error only once retries are exhausted. `cancelInFlightApply()`
+   (see the `actionGeneration` invariant below) is what lets a fresh
+   explicit click always pre-empt whichever of these is mid-flight, rather
+   than being silently swallowed by it.
+
+Neither mechanism has been confirmed against a real, organic occurrence of
+the condition it's meant to catch -- see `DEVELOPMENT.md`.
+
 **The `omarchy.network` conflict banner checks, it doesn't assume.**
 `Panel.qml` shells out to `omarchy plugin list --json | jq` on every open
 (not polled continuously -- this doesn't change while the popup is up) to
@@ -166,8 +196,10 @@ worth knowing which side of that line it's on:
 - "Set primary" / route-metric pinning in its entirety.
 - DHCP/Static IPv4 toggle and saved static-IP profiles (`ProfileList.qml`).
 - Ethernet connect/disconnect.
-- All of `EthernetSection.qml`'s status-parsing shell script and retry/
-  recovery logic.
+- All of `EthernetSection.qml`'s status-parsing shell script, and both
+  self-recovery mechanisms (Wi-Fi's radio-cycle and Ethernet's
+  disconnect/reconnect on sustained ping loss, plus Ethernet's apply
+  retry) -- see "Two self-recovery mechanisms" above.
 - The keyboard-navigation architecture (`Panel.qml`'s central cursor
   controller). The built-in plugin also has vim-style navigation, but it's
   one flat `focusSection` state machine over a single network's controls;

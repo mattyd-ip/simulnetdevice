@@ -86,6 +86,14 @@ omarchy plugin enable simulnetdevice
   time and scrolls for the rest (the section header shows the total count),
   so a dense area with dozens of visible networks doesn't blow out the
   popup.
+- **Automatic recovery from a stuck connection** — if ping loss to the
+  internet is sustained rather than a one-off blip, Wi-Fi cycles its radio
+  off and back on and Ethernet disconnects and reconnects (the same fix
+  you'd do by hand), each with a cooldown afterward so a condition this
+  can't actually fix doesn't turn into repeated flapping. Separately, an
+  Ethernet Apply that fails because the cable isn't plugged in yet retries
+  automatically the moment it is, and a failure with the cable already
+  present gets a few automatic retries before showing a real error.
 - **Full keyboard navigation** — `j`/`k` (or ↓/↑) move between control
   groups, `h`/`l` (or ←/→) move between items in the current group and hop
   to the other column when Wi-Fi and Ethernet are side by side, `Space`/
