@@ -85,3 +85,10 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 - Replaced ARCHITECTURE.md's "Development setup" section with a shorter
   testing note
   ([`6768163`](https://github.com/mattyd-ip/simulnetdevice/commit/6768163)).
+
+## 2026-09-08T15:18:54-04:00
+
+### Changed
+
+- Trimmed `.gitignore` to generic patterns only
+  ([`8fbc861`](https://github.com/mattyd-ip/simulnetdevice/commit/8fbc861)).
