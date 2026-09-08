@@ -81,6 +81,8 @@ omarchy plugin enable simulnetdevice
   `Space`/`Enter` to activate, `x` to forget/delete, `Tab` to switch
   plugins, `Escape` to close.
 
+See [`CHANGELOG.md`](CHANGELOG.md) for what's changed recently.
+
 ## Tested on
 
 Omarchy 4.0.2 (Arch Linux, kernel 7.1.9-arch1-2) on a Lenovo ThinkPad E15
