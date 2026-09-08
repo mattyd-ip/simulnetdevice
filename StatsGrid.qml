@@ -6,16 +6,13 @@ import qs.Commons
 import "Model.js" as Model
 
 // Ping / packet loss / throughput / IP / gateway grid for one interface.
-// Each instance owns its own throughput+ping sample history, so two of
-// these (one per interface) track independently rather than sharing one
-// default-route sample the way the built-in omarchy.network widget does.
+// Each instance owns its own throughput+ping sample history.
 Item {
   id: root
 
   required property QtObject bar
   // Parsed key/value status for this interface: iface, ip, prefix, gateway,
-  // rx_bytes, tx_bytes, router_ping_ms, internet_ping_ms -- same shape the
-  // owning section's status script already produces.
+  // rx_bytes, tx_bytes, internet_ping_ms.
   property var info: ({})
   property bool visibleGrid: true
 
@@ -33,12 +30,7 @@ Item {
   readonly property bool hasInternetPing: internetPingSamples.length > 0
   readonly property bool hasTransferStats: info.rx_bytes !== undefined
 
-  // Fired when the most recent sustainedLossThreshold samples are *all*
-  // lost -- distinct from internetPingPacketLoss (a percentage over the
-  // whole pingHistoryWindow, which stays elevated for a while even after
-  // things recover and so is the wrong signal to act on). This is for
-  // callers that want to actually do something about a connection that's
-  // really stuck right now, not just display a number.
+  // Fired when the most recent sustainedLossThreshold samples are all lost.
   readonly property int sustainedLossThreshold: 5  // ~15s at the 3s poll interval
   signal sustainedPacketLoss()
 
@@ -65,8 +57,7 @@ Item {
     if (Model.isSustainedPingLoss(internetPingSamples, sustainedLossThreshold)) sustainedPacketLoss()
   }
 
-  // Reset so reopening the panel (or the interface dropping out) doesn't
-  // carry over a rate computed from a sample taken minutes ago.
+  // Clears throughput and ping history.
   function reset() {
     prevIface = ""
     prevRxBytes = 0

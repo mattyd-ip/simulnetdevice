@@ -6,11 +6,10 @@ import qs.Ui
 import qs.Commons
 import "Model.js" as Model
 
-// Wi-Fi status + radio on/off + primary-route selection + band selection +
+// Wi-Fi status, radio on/off, primary-route selection, band selection, and
 // nearby-network scanning/joining/forgetting, scoped directly to the Wi-Fi
-// interface rather than the default route -- same reasoning as
-// EthernetSection.qml. WPA-Enterprise (802.1x) networks stay the built-in
-// omarchy.network widget's job for now (see README's Known limitations).
+// interface rather than the default route. WPA-Enterprise (802.1x)
+// networks are not supported (see README's Known limitations).
 Item {
   id: root
 
@@ -18,21 +17,14 @@ Item {
   property bool opened: false
 
   // ---------- Keyboard cursor ----------
-  // Driven from Panel.qml's central cursor controller (see its own
-  // "Keyboard cursor" comment) -- cursorGroup arrives as -1 whenever the
-  // cursor actually belongs to EthernetSection, which makes every
-  // `hasCursor` binding below naturally false without this component
-  // needing to know the other one exists.
+  // Driven from Panel.qml. cursorGroup is -1 when the cursor belongs to
+  // EthernetSection.
   property bool cursorActive: false
   property int cursorGroup: -1
   property int cursorItem: -1
 
-  // Groups, top to bottom: the hero row, the band pills (only when there's
-  // an actual band choice), then one group per nearby network -- each its
-  // own group (not one "list" group with h/l between rows) because the
-  // rows are stacked vertically, and j/k is what moves vertically here;
-  // h/l between rows read as sideways motion for something laid out
-  // top-to-bottom (this is what ProfileList's saved-profile rows do too).
+  // Groups, top to bottom: "hero", "band" (when a band choice exists), one
+  // "network-N" group per nearby network.
   readonly property var navGroupIds: {
     var ids = ["hero"]
     if (root.canSelectBand) ids.push("band")
@@ -75,9 +67,6 @@ Item {
   readonly property string iface: wifiDevice ? wifiDevice.name : ""
 
   // Picks the connected device of this type, else the first-enumerated one.
-  // Lifted from the built-in omarchy.network widget's Panel.qml (same
-  // function, unchanged) -- see README's Known limitations for what this
-  // means on a box with two Wi-Fi adapters.
   function findDevice(type) {
     var devices = networkDevices || []
     var fallback = null
@@ -108,8 +97,7 @@ Item {
   readonly property int routeMetric: parseInt(info.route_metric, 10)
   readonly property bool isPrimary: Model.isPrimary(info.route_metric, primaryCompareMetric)
   property var primaryCompareMetric: undefined
-  // See EthernetSection's identical comment: a metric change needs a
-  // `connection up` to actually move into the live routing table.
+  // A metric change requires `connection up` to take effect.
   readonly property string setMetricScript:
     "conn=$1; metric=$2\n" +
     "nmcli connection modify \"$conn\" ipv4.route-metric \"$metric\" || exit 1\n" +
@@ -117,32 +105,16 @@ Item {
 
   function setRouteMetric(metric) {
     if (!hasProfile) return
-    // See EthernetSection's identical comment: hasProfile stays true even
-    // while disconnected (fallback profile-name lookup), so without this
-    // guard the sibling's demote-to-secondary cross-wire would force
-    // `connection up` here and silently re-enable an interface the user
-    // just explicitly disabled.
     if (!isConnected) return
     var promoting = metric === Model.PRIMARY_METRIC
-    // Skip the actual round-trip when nothing would actually change --
-    // `connection up` forces a real Wi-Fi disconnect/reconnect (confirmed
-    // live), which every unrelated "Set primary" click on Ethernet would
-    // otherwise trigger here for no reason. But a genuine "make me primary"
-    // click still has to tell the sibling to demote even when *my* metric
-    // already happens to be right -- see EthernetSection's identical
-    // comment (two connections tied at the same metric could otherwise
-    // never be untied).
+    // If the metric already matches, skip the round-trip; still emit
+    // routeMetricApplied when promoting.
     if (parseInt(metric, 10) === routeMetric) {
       if (promoting) root.routeMetricApplied()
       return
     }
     metricProc.command = ["bash", "-c", setMetricScript, "wifi-metric", info.connection, String(metric)]
-    // Only a genuine promotion to primary should tell the sibling to
-    // demote itself -- if the demotion call below also emitted this, the
-    // sibling's own demote-in-response would bounce right back and demote
-    // us too, forever, both settling on SECONDARY_METRIC no matter which
-    // side was actually clicked (confirmed live: both connections' saved
-    // profiles converge on 600).
+    // routeMetricApplied fires only on promotion, not demotion.
     metricProc.promoting = promoting
     metricProc.running = true
   }
@@ -157,12 +129,8 @@ Item {
     }
   }
 
-  // Band selection delegates entirely to `omarchy-network-band`, the same
-  // system CLI the built-in omarchy.network widget shells out to -- it
-  // already does the real work (reading/pinning 802-11-wireless.band via
-  // nmcli, cross-checking reachable bands via `iw`, and reverting on a
-  // failed reassociation), so this just polls its status and forwards clicks
-  // to it rather than reimplementing any of that.
+  // Band selection delegates to the `omarchy-network-band` system CLI;
+  // this polls its status and forwards clicks to it.
   property var bandInfo: ({})
   readonly property string bandCurrent: bandInfo.band || ""
   readonly property string bandSelected: bandInfo.selected || "auto"
@@ -170,11 +138,8 @@ Item {
   property string pendingBand: ""
   readonly property bool bandBusy: pendingBand !== ""
   readonly property string bandEffective: bandBusy ? pendingBand : bandSelected
-  // Also stays true once a band is pinned even if a later scan can't confirm
-  // more than one band right now (weak signal, AP briefly missing from the
-  // cache) -- otherwise the control would vanish while a non-Auto pin is
-  // still in effect, with no way back to Auto short of `omarchy network
-  // band auto` from a terminal.
+  // True while connected, and either more than one band is available or a
+  // non-Auto band is currently pinned.
   readonly property bool canSelectBand: root.isConnected
     && (root.bandAvailable.length > 1 || root.bandEffective !== "auto")
 
@@ -189,8 +154,7 @@ Item {
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.bandInfo = Model.parseKeyValue(text) }
   }
 
-  // Slower than pollTimer on purpose: this shells out to nmcli/iw several
-  // times, and band availability only moves when a scan turns up a new BSSID.
+  // Refreshes band info every 4s while the popup is open.
   Timer {
     id: bandPollTimer
     interval: 4000
@@ -200,9 +164,7 @@ Item {
     onTriggered: root.refreshBand()
   }
 
-  // Pinning a band forces a real reassociation, so this gets its own Process
-  // rather than sharing metricProc -- a concurrent "Set primary" click
-  // shouldn't be blocked by, or block, a band change.
+  // Runs on its own Process, independent of metricProc.
   function setBand(band) {
     if (bandActionProc.running || !band || band === root.bandEffective) return
     root.pendingBand = band
@@ -223,27 +185,15 @@ Item {
   implicitWidth: column.implicitWidth
   implicitHeight: column.implicitHeight
 
-  // The one toggle here is the radio itself (Networking.wifiEnabled), not a
-  // per-profile connect/disconnect like Ethernet's: there's no scan/join UI
-  // in this plugin to pick *which* network to bring up, and NetworkManager's
-  // own autoconnect already handles reconnecting to a known SSID once the
-  // radio is back on -- same behavior the built-in widget's power switch
-  // relies on.
+  // Toggles the Wi-Fi radio (Networking.wifiEnabled).
   function toggleRadio() {
     Networking.wifiEnabled = !Networking.wifiEnabled
     Qt.callLater(function() { root.refresh() })
   }
 
-  // Confirmed live: a real network-side condition (not something this
-  // plugin's own ping check imagines) can leave Wi-Fi passing ARP but
-  // dropping everything else indefinitely -- it does NOT clear on its own
-  // no matter how long you wait, only a genuine radio off/on (a real
-  // 802.11 disassociate + reassociate, same as the manual "Turn Wi-Fi off"
-  // toggle) restores it. `recovering` both drives the button text and,
-  // more importantly, blocks re-triggering every single poll while still
-  // stuck -- and `recoveryCooldownTimer` blocks re-triggering right after
-  // a recovery attempt too, so a case this doesn't actually fix can't turn
-  // into a radio flapping on and off every ~15s forever.
+  // Recovers from sustained ping loss by cycling the radio off and back on.
+  // recovering blocks re-triggering while a recovery is in flight;
+  // recoveryOnCooldown blocks re-triggering for 30s after one completes.
   property bool recovering: false
   property bool recoveryOnCooldown: false
   function recoverConnection() {
@@ -300,9 +250,7 @@ Item {
     "if [[ -r /sys/class/net/$iface/statistics/rx_bytes ]]; then printf 'rx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/rx_bytes)\"; fi\n" +
     "if [[ -r /sys/class/net/$iface/statistics/tx_bytes ]]; then printf 'tx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/tx_bytes)\"; fi\n" +
     "if [[ $do_ping == 1 ]]; then\n" +
-    // See EthernetSection's identical comment: -I $iface keeps this row's
-    // reading scoped to this interface, not whichever one owns the default
-    // route right now.
+    // -I $iface scopes the ping to this interface.
     "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
     "  printf 'internet_ping_ms\\t%s\\n' \"${ms:-}\"\n" +
     "fi\n" +
@@ -516,10 +464,8 @@ Item {
             verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
             bordered: true
             width: bandRow.cellWidth
-            // Which mode is pinned (Auto vs a specific band) -- the live
-            // band itself is shown next to the SSID in the hero row instead
-            // of also lighting up its pill here, which read as two
-            // contradictory highlights when Auto picked a specific band.
+            // Highlights the pinned mode (Auto or a specific band), not
+            // necessarily the live band.
             active: root.bandEffective === modelData
             enabled: !root.bandBusy
             hasCursor: root.currentGroupId === "band" && root.cursorItem === index
@@ -540,25 +486,18 @@ Item {
       width: parent.width
       bar: root.bar
       device: root.wifiDevice
-      // Radio off means a scan can never complete -- gating on wifiEnabled
-      // too keeps the scanner from spinning forever with nothing to show
-      // for it (and matches the "only run while actually useful" cost
-      // tradeoff already described below).
+      // Active only while the popup is open and the radio is on.
       active: root.opened && Networking.wifiEnabled
       extraHeight: root.extraForList
       cursorIndex: root.currentGroupId.indexOf("network-") === 0 ? parseInt(root.currentGroupId.substring(8), 10) : -1
     }
   }
 
-  // Set externally (by Panel.qml, in two-column mode) to the Ethernet
-  // column's height, so the nearby-networks list can grow downward to
-  // match instead of leaving blank space beside a taller Ethernet side.
+  // Set by Panel.qml to Ethernet's column height in two-column mode.
   property real stretchTargetHeight: 0
 
-  // Everything except the (possibly stretched) network list, computed
-  // independently of scanList's actual rendered height -- reading
-  // column.implicitHeight here instead would create a binding loop, since
-  // that already includes whatever height extraForList gives the list.
+  // Sum of every child except the network list's stretched height (uses
+  // scanList.unstretchedImplicitHeight, not column.implicitHeight).
   readonly property real naturalHeight:
     heroItem.implicitHeight + column.spacing
     + (root.isConnected ? statsSeparator.implicitHeight + column.spacing : 0)
@@ -570,7 +509,7 @@ Item {
 
   readonly property real extraForList: Math.max(0, stretchTargetHeight - naturalHeight)
 
-  // Exposed so Panel.qml's PanelKeyCatcher can block h/j/k/l-as-navigation
-  // while a network's password field is focused.
+  // Used by Panel.qml's PanelKeyCatcher to block navigation while a
+  // password field is focused.
   readonly property bool anyFieldFocused: scanList.anyFieldFocused
 }

@@ -26,144 +26,93 @@ see `README.md`; for the dev loop and forward-looking notes see
 `WifiSection.qml` and `EthernetSection.qml` each own their own `info`
 object, `Process`/`Timer` polling, and form state. Neither reads the
 default route — every status query is scoped directly to that section's
-own interface (`ip`/`nmcli ... dev $iface`), which is the entire reason
-this plugin exists instead of the built-in `omarchy.network` plugin (that
-plugin reports only whichever interface currently owns the default route,
-so a second connected interface is invisible in it). `Panel.qml` is a thin
-shell: it instantiates one of each section, lays them out in a `Grid`
-(1 or 2 columns depending on `twoColumn`), and picks the bar icon.
+own interface (`ip`/`nmcli ... dev $iface`). `Panel.qml` is a thin shell:
+it instantiates one of each section, lays them out in a `Grid` (1 or 2
+columns depending on `twoColumn`), and picks the bar icon.
 
 **"Set primary" is pairwise by construction.** There is no shared
-route-metric coordinator. Each section exposes `routeMetric`,
-`isPrimary` (compared against `primaryCompareMetric`), `setRouteMetric()`,
-and a `routeMetricApplied` signal. `Panel.qml` wires the two sections
-together directly: each one's `primaryCompareMetric` is bound to the
-other's live `routeMetric`, and each one's `onRouteMetricApplied` calls
-`setRouteMetric(SECONDARY_METRIC)` on the other, by id. This works cleanly
-for exactly two interfaces; it does not generalize to N without a real
-rewrite (see `DEVELOPMENT.md`'s multi-NIC notes) — a promotion has to
-demote every other connected interface, not one named sibling, and this
-was the source of the trickiest bugs in the project's history (a feedback
-loop and a deadlock — see `git log`), so treat any change here with extra
-care and prefer live-testing route-metric changes only in ways that can't
-cut the machine's own active connection.
+route-metric coordinator. Each section exposes `routeMetric`, `isPrimary`
+(compared against `primaryCompareMetric`), `setRouteMetric()`, and a
+`routeMetricApplied` signal. `Panel.qml` wires the two sections together
+directly: each one's `primaryCompareMetric` is bound to the other's live
+`routeMetric`, and each one's `onRouteMetricApplied` calls
+`setRouteMetric(SECONDARY_METRIC)` on the other, by id. This does not
+generalize to more than two interfaces without a rewrite (see
+`DEVELOPMENT.md`'s multi-NIC notes).
 
-**Per-instance state, not singletons.** Because each section is a normal
-QML component instance rather than a global/singleton, its `info`,
+**Per-instance state, not singletons.** Each section is a normal QML
+component instance rather than a global/singleton, so its `info`,
 `actionProc`, retry/recovery timers, and `actionGeneration` counter are
-naturally isolated per instance, with nothing shared across sections.
+isolated per instance, with nothing shared across sections.
 
 **`Model.js` holds all the pure logic.** Parsing (`parseKeyValue`),
 formatting, validation, and the throughput/ping/route-metric/profile math
 all live here with no QML/Quickshell imports, so they're runnable and
 testable under plain `node`. QML files call into `Model.js` rather than
-reimplementing this logic inline — if you're looking for *why* a status
-string is shaped a certain way, or how a rate/average is computed, this is
-the file to check first.
+reimplementing this logic inline.
 
-**Keyboard navigation is a central controller over two dumb sections.**
-`Panel.qml` owns the only cursor state that exists (`cursorSection`,
-`cursorGroup`, `cursorItem`) and is the only thing that knows both sections
-exist. Each section instead exposes a small, identical interface -- a
-`navGroupIds` list plus `navGroupCount(id)` / `navActivate(id, item)` /
-`navDelete(id, item)` -- and receives `cursorActive`/`cursorGroup`/
-`cursorItem` back as plain input properties, with `cursorGroup` arriving as
-`-1` whenever the cursor actually belongs to the other section. Each
-section also computes its own `currentGroupId` (the group name the cursor
-is on, or `""`), so every control's own `hasCursor` binding is just
+**Keyboard navigation is a central controller over two sections.**
+`Panel.qml` owns the cursor state (`cursorSection`, `cursorGroup`,
+`cursorItem`). Each section exposes `navGroupIds`, `navGroupCount(id)`,
+`navActivate(id, item)`, `navDelete(id, item)`, and receives
+`cursorActive`/`cursorGroup`/`cursorItem` back as input properties, with
+`cursorGroup` arriving as `-1` whenever the cursor belongs to the other
+section. Each section computes its own `currentGroupId` (the group name
+the cursor is on, or `""`), so every control's `hasCursor` binding is
 `currentGroupId === "id" && cursorItem === N`. Neither section imports or
 references the other.
 
 Groups are vertically-stacked content, navigated with `j`/`k`; items within
-a group are horizontally-adjacent controls, navigated with `h`/`l`. This is
-why the nearby-network list (`WifiSection.qml`) and the saved-profile list
-(`EthernetSection.qml`) each generate one group *per row* (`"network-0"`,
-`"network-1"`, ... and `"profile-0"`, `"profile-1"`, ...) rather than
-packing every row into one group navigated with `h`/`l` -- rows are stacked
-top to bottom, so `j`/`k` is what actually matches how they're laid out.
-Getting this backwards was an actual bug caught during review: it read as
-correct in both cases until it was navigated for real.
+a group are horizontally-adjacent controls, navigated with `h`/`l`. The
+nearby-network list (`WifiSection.qml`) and the saved-profile list
+(`EthernetSection.qml`) each generate one group per row (`"network-0"`,
+`"network-1"`, ... and `"profile-0"`, `"profile-1"`, ...).
 
-`Panel.qml`'s `moveCursor(dx, dy)` is the only code that hands the cursor
-from one section's edge to the other's, and it does so differently
+`Panel.qml`'s `moveCursor(dx, dy)` hands the cursor between sections,
 depending on `panel.twoColumn`: `j`/`k` spill into the other section only
 while stacked (single column), landing on that section's first group when
-moving down or its last group when moving up; `h`/`l` spill into the other
-*column* only while side by side, preferring a group with the same id
-(so leaving "hero" on one side lands on "hero" on the other) and falling
-back to "hero" specifically -- not "whatever group the same numeric index
-happens to be", which landed on the nearby-network list often enough to
-matter, and that list's length changes on its own as background scans
-complete, so "the last row" stopped being the actual last row within
-moments and made crossing back out unreliable. The column crossing also
-picks which item you land on based on which key crossed: `l` (moving
-toward the start) lands on item 0, `h` (moving toward the end) lands on
-the last item -- landing on item 0 unconditionally made `h` overshoot
-straight past a whole row of items. The row crossing (`j`/`k`, stacked
-mode) always lands on item 0 regardless of direction, since a group isn't
-a row with a "near" and "far" end the way items in a group are.
+moving down or its last group when moving up. `h`/`l` spill into the other
+column only while side by side, landing on a group with the same id if the
+destination section has one, else on "hero"; `l` lands on item 0 of the
+destination group, `h` on its last item. The row crossing (`j`/`k`,
+stacked mode) always lands on item 0.
 
-Deliberately out of scope: mouse hover does not move the keyboard cursor
-(unlike the built-in plugin), so the two coexist without needing to be
-unified.
+Mouse hover does not move the keyboard cursor.
 
 **Two self-recovery mechanisms exist beyond passive status reporting.**
 
-1. *Sustained ping-loss recovery.* `StatsGrid.qml` emits `sustainedPacketLoss()`
-   only when `Model.isSustainedPingLoss()` sees the most recent 5 samples
-   (~15s) *all* lost -- deliberately not the same signal as the whole-window
-   `pingPacketLossPercent` used for the red/urgent color, since that lags
-   real recovery by up to ~72s and would fire the recovery far too eagerly
-   on a single blip. `WifiSection.qml` responds with a genuine radio
-   off -> 1.5s -> on cycle; `EthernetSection.qml` responds with a
-   disconnect -> reconnect chain through the section's existing
+1. *Sustained ping-loss recovery.* `StatsGrid.qml` emits
+   `sustainedPacketLoss()` when `Model.isSustainedPingLoss()` sees the
+   most recent 5 samples (~15s) all lost. `WifiSection.qml` responds with
+   a radio off → 1.5s → on cycle; `EthernetSection.qml` responds with a
+   disconnect → reconnect chain through the section's existing
    `actionProc`/`pendingAction` machinery (`recoveryPhase`: `"" |
-   "disconnecting" | "connecting"`). Both sides guard against re-triggering
-   mid-recovery and enforce a cooldown after any attempt (success or
-   failure), so a condition this can't actually fix doesn't turn into a
-   permanently flapping interface.
+   "disconnecting" | "connecting"`). Both sides guard against
+   re-triggering mid-recovery and enforce a cooldown after any attempt.
 2. *Ethernet apply retry.* When an Apply/DHCP/Static action fails,
-   `EthernetSection.qml` distinguishes two causes. No cable at all sets
-   `retryActionOnCarrier` and waits indefinitely for `hasCable` to flip
-   true before retrying once, automatically. Cable already present but the
-   attempt still failed (NetworkManager not yet settled right after a
-   prior failure, observed live) gets a bounded retry instead --
-   `maxApplyRetries` (3) on a 2-second `applyRetryTimer` -- falling through
-   to a real error only once retries are exhausted. `cancelInFlightApply()`
-   (see the `actionGeneration` invariant below) is what lets a fresh
-   explicit click always pre-empt whichever of these is mid-flight, rather
-   than being silently swallowed by it.
+   `EthernetSection.qml` distinguishes two causes: no cable sets
+   `retryActionOnCarrier` and waits for `hasCable` to flip true before
+   retrying once; cable already present gets a bounded retry
+   (`maxApplyRetries`: 3, on a 2-second `applyRetryTimer`) before falling
+   through to an error. `cancelInFlightApply()` lets a fresh explicit
+   click pre-empt whichever of these is mid-flight.
 
-Neither mechanism has been confirmed against a real, organic occurrence of
-the condition it's meant to catch -- see `DEVELOPMENT.md`.
+See `DEVELOPMENT.md` for the testing status of both mechanisms.
 
-**The `omarchy.network` conflict banner checks, it doesn't assume.**
-`Panel.qml` shells out to `omarchy plugin list --json | jq` on every open
-(not polled continuously -- this doesn't change while the popup is up) to
-read the built-in plugin's actual `enabled`/`canDisable` state, rather than
-caching a one-time answer or hardcoding an assumption about a typical
-install. `canDisable` gates whether the "Disable it" button even appears --
-if a future Omarchy version marks it non-disableable, the fallback text is
-still correct. Dismissal ("Keep both") is a marker file
-(`~/.config/simulnetdevice/hide-network-conflict-notice`), not an in-memory flag,
-so choosing to run both is remembered across restarts, not just for one
-session.
+**The `omarchy.network` conflict banner checks live state on each open.**
+`Panel.qml` shells out to `omarchy plugin list --json | jq` every time the
+popup opens to read the built-in plugin's `enabled`/`canDisable` state.
+`canDisable` gates whether the "Disable it" button appears. Dismissal
+("Keep both") is a marker file
+(`~/.config/simulnetdevice/hide-network-conflict-notice`), not an
+in-memory flag.
 
-There's no real conflict for anything either plugin changes on purpose —
-route-metric writes, band pinning, DHCP/Static, connect/disconnect — since
-all of that goes through `nmcli` against NetworkManager's own state, and
-NetworkManager is the single source of truth both plugins just read back;
-neither can leave the other showing stale or contradictory state. The one
-actual exception is Wi-Fi scanning, controlled by
-`WifiDevice.scannerEnabled` — a flag that lives outside NetworkManager
-(it's not a connection setting, just an in-memory scan toggle) and is
-shared by every plugin that touches it, with no reference counting across
-separate plugins. If both popups are open at once, closing one can turn
-scanning off for the other too; this is non-critical for a different
-reason than everything else above — it self-heals the moment either popup
-reopens (which refreshes its own scan state), so at worst you see a stale
-nearby-networks list for a moment, not lost or corrupted state. This is
-the one exception SimulNetDevice's banner exists to surface at all.
+Route-metric writes, band pinning, DHCP/Static, and connect/disconnect all
+go through `nmcli` against NetworkManager's own state, so neither plugin
+can leave the other showing stale state. The one shared flag is Wi-Fi
+scanning (`WifiDevice.scannerEnabled`), which lives outside NetworkManager
+with no reference counting across plugins — if both popups are open,
+closing one can turn scanning off for the other until it's reopened.
 
 ## What's original vs. adapted from `omarchy.network`
 
@@ -174,21 +123,16 @@ worth knowing which side of that line it's on:
 **Lifted essentially unchanged** from the built-in plugin's `Panel.qml`:
 - `findDevice(type)` in both `WifiSection.qml` and `EthernetSection.qml` —
   picks the connected device of a given `DeviceType`, else the
-  first-enumerated one. This is the reason a second same-type NIC isn't
-  handled today (see `DEVELOPMENT.md`).
+  first-enumerated one (see `DEVELOPMENT.md`'s multi-NIC notes).
 - The Wi-Fi scan-list per-row action state machine in `WifiScanList.qml`
   (`networkForSsid`, `wifiIndexForSsid`, `runNetworkAction`,
-  `clearNetworkAction`, `failNetworkAction`, `checkActionCompletion`) —
-  adapted to this component's own state, but the logic and structure are
-  the built-in plugin's.
+  `clearNetworkAction`, `failNetworkAction`, `checkActionCompletion`).
 
 **Ported and then refactored** from the built-in plugin's `Model.js`:
 - Throughput-rate delta math (`throughputState`) and ping/packet-loss
-  rolling-average math (`pingLatencyState` and friends) — same approach
-  and tuned constants (e.g. `pingHistoryWindow: 24`, `pingAverageWindow:
-  5`), but pulled out of inline QML into pure `Model.js` functions so each
-  `StatsGrid` instance can own an independent per-interface history
-  instead of one shared default-route sample.
+  rolling-average math (`pingLatencyState` and friends), pulled out of
+  inline QML into pure `Model.js` functions, one independent history per
+  `StatsGrid` instance.
 
 **Original to SimulNetDevice**, with no equivalent in the built-in plugin:
 - The entire dual-simultaneous-interface architecture described above —
@@ -201,20 +145,16 @@ worth knowing which side of that line it's on:
   disconnect/reconnect on sustained ping loss, plus Ethernet's apply
   retry) -- see "Two self-recovery mechanisms" above.
 - The keyboard-navigation architecture (`Panel.qml`'s central cursor
-  controller). The built-in plugin also has vim-style navigation, but it's
-  one flat `focusSection` state machine over a single network's controls;
-  SimulNetDevice's two independent, side-by-side-or-stacked sections needed a
-  different shape (a controller that hands a cursor between two sections
-  that stay unaware of each other) rather than anything portable from the
-  built-in's model — see "Keyboard navigation" above.
+  controller). The built-in plugin has a flat `focusSection` state machine
+  over a single network's controls instead — see "Keyboard navigation"
+  above.
 - The `omarchy.network` conflict banner. The built-in plugin has no
-  equivalent — it has no reason to check for SimulNetDevice's existence.
+  equivalent.
 
 **Delegates to an existing system tool rather than reimplementing it**:
 Wi-Fi band selection (`WifiSection.qml`) shells out to
-`omarchy-network-band`, the same standalone CLI the built-in plugin's own
-band picker uses — neither plugin reimplements the `iw`/`nmcli` band-pinning
-logic; this one just polls its status output and forwards clicks to it.
+`omarchy-network-band`, the same CLI the built-in plugin's own band picker
+uses, polling its status output and forwarding clicks to it.
 
 **Framework boilerplate that looks borrowed but isn't**: the
 `Panel { moduleName; ipcTarget; manageIpc: false }` root wiring and the
@@ -225,64 +165,35 @@ conventions every Omarchy shell plugin uses, not anything specific to
 
 ## Invariants worth knowing before you change things
 
-- **`hasProfile` is not `isConnected`.** A wired/Wi-Fi profile can exist
-  (so `hasProfile` is true) while the interface is disconnected — this is
-  intentional (it's how the status line and the DHCP/Static form still
-  work while offline), but it means `setRouteMetric()` guards on
-  `isConnected` explicitly rather than assuming `hasProfile` implies it's
-  live.
-- **`primaryCompareMetric` uses `undefined`, not a sentinel number, to mean
+- **`hasProfile` is not `isConnected`.** A profile can exist while the
+  interface is disconnected; `setRouteMetric()` guards on `isConnected`
+  explicitly rather than assuming `hasProfile` implies it's live.
+- **`primaryCompareMetric` uses `undefined`, not a sentinel number, for
   "nothing to compare against."** `Model.isPrimary()` treats a non-finite
-  compare value as "I'm primary by default." `Panel.qml` relies on this by
-  passing `undefined` (not the sibling's stale last-known metric) whenever
-  the sibling isn't actually connected.
-- **Only a genuine promotion should tell the sibling to demote.** If a
-  demotion also triggered a demote-notify, the sibling's own
-  demote-in-response would bounce back and demote the original caller too,
-  forever. This is why `metricProc.promoting` gates the
-  `routeMetricApplied` signal rather than firing it on every metric write.
-- **`actionGeneration` exists to make killed processes' late exits
-  harmless.** Any function that can cancel an in-flight `Process`
-  (`cancelInFlightApply()`) bumps this counter first; `Process.onExited`
+  compare value as primary-by-default. `Panel.qml` passes `undefined`
+  (not the sibling's stale last-known metric) whenever the sibling isn't
+  connected.
+- **`routeMetricApplied` fires only on a genuine promotion, not a
+  demotion**, gated by `metricProc.promoting`.
+- **`actionGeneration` is bumped before cancelling an in-flight
+  `Process`.** `cancelInFlightApply()` bumps it first; `Process.onExited`
   compares its own captured generation against the current one and ignores
-  itself if they don't match. If you add a new cancellable action, wire it
-  through this counter too, or a stale exit can silently clobber newer
-  state.
+  itself on a mismatch. A new cancellable action needs to wire through
+  this counter too.
 - **`staticPanelOpen` and `manualEntryOpen` are two separate disclosure
-  states, not one.** The DHCP/Static buttons are always visible; clicking
-  "Static" flips `staticPanelOpen`, revealing the saved-profiles list
-  (`ProfileList.qml`) below it, and clicking it again — or closing the
-  popup — collapses that back. `manualEntryOpen` is nested one level
-  deeper, behind its own "Enter manually…" button inside the static
-  panel, reserved for typing a brand-new address/gateway/DNS config or
-  editing one — applying an existing saved profile never opens it. If a
-  static profile is currently applied, its name stays visible under the
-  buttons even while `staticPanelOpen` is false, so users don't need to
-  reopen the panel just to confirm what's active.
-- **The nearby-network list is a `ListView`, not a `Repeater`, specifically
-  to stay cheap at `visibleRowCount` rows (~4) with the rest reached by
-  scrolling.** (`WifiScanList.qml`.) Capping height and clipping a plain
-  `Column`/`Repeater` would still instantiate every delegate up front;
-  `ListView` only realizes rows near the viewport, which matters once a
-  dense area has dozens of visible networks. The section header shows the
-  total count separately from what's currently scrolled into view.
-- **Static-IP fields are set imperatively, not via a `text:` binding.**
-  Typing in a `TextField` permanently severs a declarative binding on that
-  property, so `seedStaticFields()` writes `addressInput.text = ...`
-  directly. A `text: root.addressField` binding would stop reseeding after
-  the user's first keystroke.
+  states.** Clicking "Static" toggles `staticPanelOpen`, revealing the
+  saved-profiles list (`ProfileList.qml`); the panel closes on a second
+  click or the popup closing. `manualEntryOpen` is nested inside that,
+  behind its own "Enter manually…" button.
+- **The nearby-network list is a `ListView`, not a `Repeater`**, capped at
+  `visibleRowCount` rows (`WifiScanList.qml`), scrolling for the rest.
+- **Static-IP fields are set imperatively, not via a `text:` binding**
+  (`seedStaticFields()` writes `addressInput.text = ...` directly).
 - **All ported/original shell scripts pass user-typed values as positional
   args**, never interpolated into the script string — e.g.
-  `applyIpv4Script` takes `addr`/`gw`/`dns` as `$3`/`$4`/`$5`. Keep this
-  pattern for any new script that touches user input.
-- **A `TextField` that becomes invisible does not lose `activeFocus`.** Qt
-  Quick only clears focus when something else explicitly claims it — hiding
-  the container isn't enough, and a static-IP apply succeeding collapses
-  the fields asynchronously (in a `Process.onExited` handler) with nothing
-  else ever taking focus back. Any `anyFieldFocused`-style gate must key off
-  the form's own open/closed flag (`manualEntryOpen`, `addingProfile`,
-  `passwordSsid !== ""`), not the field's raw `.activeFocus` alone —
-  otherwise the gate stays stuck true forever on a
-  field nobody can see, and every keypress silently types into it instead
-  of navigating. `Panel.qml`'s key catcher additionally reclaims focus for
-  itself the moment that gate clears, since Qt Quick won't do that either.
+  `applyIpv4Script` takes `addr`/`gw`/`dns` as `$3`/`$4`/`$5`.
+- **A `TextField` that becomes invisible does not lose `activeFocus`.**
+  `anyFieldFocused`-style gates key off the form's own open/closed flag
+  (`manualEntryOpen`, `addingProfile`, `passwordSsid !== ""`), not the
+  field's raw `.activeFocus` alone. `Panel.qml`'s key catcher reclaims
+  focus for itself the moment that gate clears.

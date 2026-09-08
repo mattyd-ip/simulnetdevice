@@ -1,7 +1,6 @@
 // Pure parsing/formatting/validation helpers shared by the Wi-Fi and
 // Ethernet sections, route-metric control, and static-IP profiles. No
-// QML/Quickshell imports here so this stays runnable/testable under plain
-// Node (see README's Development section).
+// QML/Quickshell imports, so this is runnable under plain Node.
 
 function parseKeyValue(raw) {
   var next = {}
@@ -16,10 +15,7 @@ function parseKeyValue(raw) {
   return next
 }
 
-// carrier/operstate come from /sys, nmstate from `nmcli dev show`. Three
-// independent signals because a cable can be plugged in with no active
-// NetworkManager connection (autoconnect off, profile misconfigured, etc.),
-// and that is a meaningfully different state from "unplugged".
+// carrier comes from /sys, nmstate from `nmcli dev show`.
 function linkState(info) {
   var value = info || {}
   if (value.state === "no-device") return "no-device"
@@ -42,8 +38,7 @@ function formatSpeed(mbps) {
   return v + " Mbit/s"
 }
 
-// nmcli -g on a multi-value field joins entries with commas; take the first
-// so a profile with several static addresses still shows one sane value.
+// Takes the first entry of a comma-joined nmcli -g multi-value field.
 function firstValue(csv) {
   var raw = String(csv || "").trim()
   if (raw === "") return ""
@@ -54,10 +49,8 @@ function isManualMethod(method) {
   return String(method || "").trim() === "manual"
 }
 
-// Seeds the static-IP form. Already-manual profiles show their configured
-// values (what will actually get re-applied); DHCP profiles seed from the
-// live lease, so "turn static on" defaults to "freeze the address I have
-// right now" rather than a blank/wrong prompt.
+// Seeds the static-IP form: configured values for a manual profile, else
+// the live DHCP lease.
 function staticFormDefaults(info) {
   var value = info || {}
   if (isManualMethod(value.method)) {
@@ -75,8 +68,7 @@ function staticFormDefaults(info) {
   }
 }
 
-// Very forgiving IPv4 + prefix check -- enough to stop an obviously broken
-// value from being handed to nmcli, not a full validator.
+// Forgiving IPv4 + prefix check, not a full validator.
 function isValidCidr(value) {
   return /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(String(value || "").trim())
 }
@@ -85,8 +77,7 @@ function isValidIpv4(value) {
   return /^(\d{1,3}\.){3}\d{1,3}$/.test(String(value || "").trim())
 }
 
-// Empty gateway/DNS are allowed (a static profile without a gateway is
-// valid on an isolated segment); only the address is mandatory.
+// Only the address is mandatory; gateway/DNS may be empty.
 function canApplyStatic(fields) {
   var value = fields || {}
   if (!isValidCidr(value.address)) return false
@@ -101,9 +92,6 @@ function normalizeDns(text) {
   return parts.join(",")
 }
 
-// Wi-Fi has no "cable" concept, so its link states are shaped differently
-// from Ethernet's -- "disabled" (radio off) has no wired equivalent, and
-// there is no "connecting with no adapter" ambiguity to resolve.
 function wifiLinkState(info, wifiEnabled) {
   var value = info || {}
   if (value.state === "no-device") return "no-device"
@@ -133,10 +121,6 @@ function bandLabel(band) {
 }
 
 // ---- Throughput + ping stats (per interface) ----
-// Ported from the built-in omarchy.network widget's Model.js -- same pure
-// logic, duplicated rather than imported since that plugin stays untouched
-// and this one owns its own copy per interface (two independent instances,
-// one per StatsGrid, rather than one shared default-route sample).
 
 function throughputState(previous, next, now) {
   var prev = previous || {}
@@ -196,10 +180,7 @@ function pingPacketLossPercent(samples) {
   return Math.round((lost / values.length) * 100)
 }
 
-// True only when the most recent `threshold` samples are *all* lost --
-// distinct from pingPacketLossPercent (a share of the whole history, which
-// stays nonzero for a while after a real recovery). This is for deciding
-// whether a connection is stuck right now, not for display.
+// True only when the most recent `threshold` samples are all lost.
 function isSustainedPingLoss(samples, threshold) {
   var values = Array.isArray(samples) ? samples : []
   var need = Math.max(1, parseInt(threshold, 10) || 1)
@@ -253,17 +234,12 @@ function formatPacketLoss(percent, hasSamples) {
   return value + "%"
 }
 
-// Fixed pair of route metrics used by the "Set as primary" control: the
-// primary interface gets the low value, the other gets the high one. Both
-// well below NetworkManager's own automatic values (100/600 wired/wifi
-// defaults, ~20000+ when it penalizes an interface with unconfirmed
-// connectivity), so an explicit choice always wins over the automatic one.
+// Route metrics used by the "Set as primary" control: the primary
+// interface gets the low value, the other gets the high one.
 var PRIMARY_METRIC = 100
 var SECONDARY_METRIC = 600
 
-// A connection is "primary" once its metric is the lower of the two --
-// compare against the actual sibling metric, not a hardcoded threshold,
-// since NetworkManager's own penalty can push either well above 600.
+// A connection is primary when its metric is lower than the other's.
 function isPrimary(ownMetric, otherMetric) {
   var own = parseInt(ownMetric, 10)
   var other = parseInt(otherMetric, 10)
@@ -273,12 +249,8 @@ function isPrimary(ownMetric, otherMetric) {
 }
 
 // ---- Wi-Fi scanning (nearby networks) ----
-// Ported logic (not code) from the built-in omarchy.network widget's
-// Model.js -- same shape, reimplemented against this plugin's own state.
 
-// Primitives only: rows become list-model data, so a WifiNetwork QObject
-// wrapper never ends up in a delegate's var property (NetworkManager scan
-// churn can destroy the object while a delegate is still incubating).
+// Converts a WifiNetwork into a plain-data row.
 function wifiRow(network) {
   if (!network) return null
   return {
@@ -310,8 +282,7 @@ function wifiSectionTitle(wifiNetworks, index) {
   return ""
 }
 
-// OWE (Enhanced Open) encrypts without authenticating, so it has no
-// credentials to collect -- it should neither show a lock nor open a prompt.
+// Open and OWE networks require no credentials.
 function requiresCredentials(security, openSecurity, oweSecurity) {
   return security !== openSecurity && security !== oweSecurity
 }
@@ -330,9 +301,7 @@ function networkFailureReason(reason, needsCredentials, reasons) {
   return "Failed to connect"
 }
 
-// Whether a failed connect should reopen the passphrase prompt -- only when
-// the failure is plausibly a missing/wrong saved PSK on a network that
-// actually needs one. connectWithPsk() overwrites the stored PSK on submit.
+// True when a failed connect looks like a missing/wrong saved PSK.
 function shouldRepromptPassphrase(reason, needsCredentials, reasons) {
   var r = reasons || {}
   if (!needsCredentials) return false
@@ -353,8 +322,7 @@ function profileSummary(profile) {
   return gateway === "" ? address : address + " → " + gateway
 }
 
-// Tolerant load: a missing/corrupt file yields an empty list rather than
-// throwing, since this reads straight from FileView.text() at startup.
+// A missing/corrupt file yields an empty list rather than throwing.
 function loadProfiles(text) {
   var raw = String(text || "").trim()
   if (raw === "") return []

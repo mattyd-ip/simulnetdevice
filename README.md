@@ -98,8 +98,6 @@ second adapter of the same type, non-Arch systems, etc.).
   interface).
 - **IPv4 only.** No IPv6 configuration.
 - **Static-IP profiles are Ethernet-only.**
-- **No per-process bandwidth monitoring.** Other plugins already cover this
-  ground.
 - **One Wi-Fi + one Ethernet interface, assumed.** A second adapter of the
   same type (a second Wi-Fi card, or an onboard + dock/USB Ethernet NIC) is
   invisible to SimulNetDevice — no error, it just never appears.

@@ -6,33 +6,27 @@ import qs.Ui
 import qs.Commons
 import "Model.js" as Model
 
-// Ethernet status + connect/disconnect + DHCP/static IPv4, scoped directly
-// to the wired interface (`ip`/`nmcli ... dev $iface`) rather than the
-// default route, so it stays accurate no matter which interface currently
-// carries traffic. Embedded as content inside Panel.qml's popup -- this
-// component owns no window/bar-icon chrome of its own.
+// Ethernet status, connect/disconnect, and DHCP/static IPv4, scoped
+// directly to the wired interface (`ip`/`nmcli ... dev $iface`) rather
+// than the default route. Embedded as content inside Panel.qml's popup.
 Item {
   id: root
 
   required property QtObject bar
-  // Whether the owning popup is open. Ping sampling (the only "noisy" part
-  // of the status script) only runs while true; carrier/IP/route polling
-  // for the bar icon and connect switch keeps running regardless.
+  // Ping sampling only runs while true; carrier/IP/route polling keeps
+  // running regardless.
   property bool opened: false
 
   // ---------- Keyboard cursor ----------
-  // See WifiSection's identical comment -- driven from Panel.qml's central
-  // cursor controller, -1 whenever the cursor is actually WifiSection's.
+  // Driven from Panel.qml. cursorGroup is -1 when the cursor belongs to
+  // WifiSection.
   property bool cursorActive: false
   property int cursorGroup: -1
   property int cursorItem: -1
 
-  // Groups, top to bottom: the hero row, the DHCP/Static toggle (only once
-  // there's a profile to configure), then -- only while the Static fields
-  // are actually open -- one group per saved-profile row (each with its own
-  // Apply/Delete, so h/l moves within a row and j/k moves between rows,
-  // matching how they're actually laid out), then "Save current as…", then
-  // "Enter manually" (only while it isn't already open).
+  // Groups, top to bottom: "hero", "mode" (when a profile exists), then --
+  // only while staticPanelOpen -- one "profile-N" group per saved profile,
+  // "add-profile", and "manual-toggle" (when manualEntryOpen is false).
   readonly property var navGroupIds: {
     var ids = ["hero"]
     if (root.hasProfile) ids.push("mode")
@@ -88,9 +82,6 @@ Item {
   readonly property string iface: wiredDevice ? wiredDevice.name : ""
 
   // Picks the connected device of this type, else the first-enumerated one.
-  // Lifted from the built-in omarchy.network widget's Panel.qml (same
-  // function, unchanged) -- see README's Known limitations for what this
-  // means on a box with two wired NICs (onboard + dock, say).
   function findDevice(type) {
     var devices = networkDevices || []
     var fallback = null
@@ -113,9 +104,7 @@ Item {
   readonly property string statusLine: Model.statusText(linkState)
   readonly property string speedLabel: Model.formatSpeed(info.speed)
 
-  // Which saved profile (if any) matches the currently-applied static
-  // config, surfaced in the hero so it's visible without expanding the
-  // IPv4 section at all.
+  // The saved profile (if any) matching the currently-applied static config.
   function findCurrentProfileName() {
     if (formMode !== "manual") return ""
     var profiles = profileList.profiles || []
@@ -138,13 +127,9 @@ Item {
   function connectionName() { return info.connection || "" }
   readonly property int routeMetric: parseInt(info.route_metric, 10)
   readonly property bool isPrimary: Model.isPrimary(info.route_metric, primaryCompareMetric)
-  // Panel.qml sets this to the sibling section's current metric so the
-  // "Primary" pill reflects the real comparison, not a fixed threshold.
+  // Set by Panel.qml to the sibling section's current metric.
   property var primaryCompareMetric: undefined
-  // A metric change on its own only updates the saved profile -- it doesn't
-  // retroactively touch the kernel's live routing table for an already-
-  // active connection, so `connection up` has to follow the modify (same
-  // two-step sequence already validated live: modify, then reactivate).
+  // A metric change requires `connection up` to take effect.
   readonly property string setMetricScript:
     "conn=$1; metric=$2\n" +
     "nmcli connection modify \"$conn\" ipv4.route-metric \"$metric\" || exit 1\n" +
@@ -152,31 +137,16 @@ Item {
 
   function setRouteMetric(metric) {
     if (!hasProfile) return
-    // hasProfile alone doesn't mean "currently connected" -- the status
-    // script names a saved profile as a fallback even while disconnected --
-    // so without this, the sibling's demote-to-secondary cross-wire (see
-    // Panel.qml) would force `connection up` on an interface the user just
-    // explicitly disabled, silently turning it back on.
     if (!isConnected) return
     var promoting = metric === Model.PRIMARY_METRIC
-    // Even when connected, skip the actual modify+up round-trip if the
-    // metric is already what's being asked for: `connection up` forces a
-    // real reactivation (a genuine Wi-Fi disconnect/reconnect blip on that
-    // side, confirmed live), which every unrelated "Set primary" click on
-    // the sibling would otherwise trigger for no actual change. But a
-    // genuine "make me primary" click still has to tell the sibling to
-    // demote even when *my* metric already happens to be right -- otherwise
-    // two connections that both ended up at the same metric (a leftover
-    // from an earlier bug) can never be untied, since neither side's click
-    // would ever have anything of its own left to change.
+    // If the metric already matches, skip the round-trip; still emit
+    // routeMetricApplied when promoting.
     if (parseInt(metric, 10) === routeMetric) {
       if (promoting) root.routeMetricApplied()
       return
     }
     metricProc.command = ["bash", "-c", setMetricScript, "ethernet-metric", info.connection, String(metric)]
-    // See WifiSection's identical comment: only a genuine promotion should
-    // notify the sibling to demote, or the sibling's own demote-in-response
-    // bounces back and demotes us too, forever.
+    // routeMetricApplied fires only on promotion, not demotion.
     metricProc.promoting = promoting
     metricProc.running = true
   }
@@ -194,10 +164,8 @@ Item {
   implicitWidth: column.implicitWidth
   implicitHeight: column.implicitHeight
 
-  // Local form state for the DHCP/Static choice. Kept separate from the
-  // profile's real `ipv4.method` so clicking "Static" just opens the form —
-  // nothing is written until Apply. Synced back to the real method below
-  // whenever a refresh lands and nothing is mid-flight.
+  // Local form state for the DHCP/Static choice, separate from the
+  // profile's real `ipv4.method`; nothing is written until Apply.
   property string formMode: "auto"  // "auto" | "manual"
   property string addressField: ""
   property string gatewayField: ""
@@ -205,20 +173,13 @@ Item {
   property string pendingAction: ""  // "connect" | "disconnect" | "apply-dhcp" | "apply-static"
   readonly property bool busy: pendingAction !== ""
   property string lastError: ""
-  // Set when an apply fails specifically because there's no carrier (e.g.
-  // clicked Apply/DHCP before actually plugging the cable in) -- there's no
-  // active connection for NetworkManager to retry on its own once the cable
-  // does go live, so this plugin has to notice and redo the same apply
-  // itself (see onHasCableChanged below).
+  // Set when an apply fails because there's no carrier; retried by
+  // onHasCableChanged once the cable is plugged in.
   property string retryActionOnCarrier: ""  // "" | "apply-dhcp" | "apply-static"
 
   readonly property bool canApply: Model.canApplyStatic({ address: addressField, gateway: gatewayField })
 
-  // Fields are set imperatively (not via a `text: root.addressField`
-  // binding) because typing in a TextField severs a declarative binding on
-  // that property for good -- these fields persist for the panel's whole
-  // lifetime, so a broken binding would silently stop reseeding after the
-  // user's first keystroke.
+  // Fields are set imperatively, not via a `text: root.addressField` binding.
   function seedStaticFields() {
     var seed = Model.staticFormDefaults(info)
     addressField = seed.address
@@ -229,11 +190,8 @@ Item {
     dnsInput.text = seed.dns
   }
 
-  // Called from ProfileList: fills the form from a saved profile AND
-  // applies it immediately -- with a saved profile on hand there's no
-  // reason to make the user open the raw fields and press Apply again just
-  // to reapply something already known-good. Manual entry stays reserved
-  // for actually typing or editing values (see manualEntryOpen below).
+  // Called from ProfileList: fills the form from a saved profile and
+  // applies it immediately.
   function applyProfileToForm(profile) {
     if (formMode !== "manual") selectMode("manual")
     addressField = profile.address || ""
@@ -245,26 +203,10 @@ Item {
     applyStatic()
   }
 
-  // Two independent disclosures: the static fields area (ProfileList + the
-  // raw manual-entry fields), opened by clicking "Static" and closed by
-  // clicking "Static" again or by the whole panel closing -- and, nested
-  // inside that, the raw address/gateway/DNS fields themselves, only
-  // needed to type a new config or edit an existing one (applying a saved
-  // profile never needs them open).
   property bool staticPanelOpen: false
   property bool manualEntryOpen: false
-  // Same auto-focus pattern as ProfileList's name field and the Wi-Fi
-  // password field -- gives keyboard nav somewhere to land the moment the
-  // fields appear, instead of a dead end below "Enter manually" with no
-  // way to actually reach them.
   onManualEntryOpenChanged: if (manualEntryOpen) Qt.callLater(function() { addressInput.forceActiveFocus() })
 
-  // A click here is the user changing their mind -- it should always win,
-  // even over an apply that's still working through its retries (e.g. a
-  // DHCP apply on a network with no DHCP server at all keeps retrying and
-  // sitting "busy" for as long as NetworkManager's own DHCP timeout takes
-  // per attempt, which is long enough that every button, including this
-  // one, would otherwise stay frozen for minutes -- confirmed live).
   function selectMode(mode) {
     if (busy) cancelInFlightApply()
     if (mode === "auto") {
@@ -274,11 +216,8 @@ Item {
       applyDhcp()
       return
     }
-    // Second click on "Static" while the fields are already open: just
-    // close them back up. Only actually switch away from "manual" if
-    // nothing static is really applied -- if a static profile IS live,
-    // the Static button should stay the selected one even with the
-    // fields tucked away.
+    // A second click on "Static" while open closes it; formMode only
+    // reverts to "auto" if no static profile is applied.
     if (staticPanelOpen) {
       staticPanelOpen = false
       manualEntryOpen = false
@@ -290,31 +229,21 @@ Item {
     staticPanelOpen = true
   }
 
-  // Stops whatever actionProc/retry/recovery cycle is in flight so a fresh
-  // explicit click (selectMode, applyDhcp, applyStatic) can proceed right
-  // away instead of being silently swallowed by the busy guard.
+  // Stops any in-flight actionProc/retry/recovery cycle.
   function cancelInFlightApply() {
     applyRetryTimer.stop()
     retryActionOnCarrier = ""
     applyRetriesLeft = 0
     recoveryPhase = ""
     recovering = false
-    // Bump first: if actionProc is genuinely running and gets killed below,
-    // its eventual (delayed) exit will carry the old dispatchGeneration and
-    // onExited will just ignore it instead of acting on now-stale state.
     actionGeneration += 1
     if (actionProc.running) actionProc.running = false
     pendingAction = ""
     lastError = ""
   }
 
-  // Only ever syncs FROM the live profile INTO "manual" (to reflect a
-  // static config that's actually applied). Never forces "manual" back to
-  // "auto" on its own -- the live method stays "auto" the whole time the
-  // user is filling in a new static config (nothing is written until
-  // Apply), and this function runs on every 3s poll via onInfoChanged, so
-  // doing that used to blow away the open form and whatever the user had
-  // typed before they could hit Apply.
+  // Syncs formMode from the live profile's method into "manual"; never
+  // forces "manual" back to "auto" on its own.
   function syncFormMode() {
     if (busy) return
     var manual = Model.isManualMethod(info.method)
@@ -328,10 +257,7 @@ Item {
 
   onInfoChanged: syncFormMode()
 
-  // Bumped by cancelInFlightApply() and every dispatch below -- lets
-  // actionProc.onExited recognize and ignore the delayed exit of a process
-  // that was killed out from under it, rather than acting on stale state
-  // (see cancelInFlightApply's comment).
+  // Bumped by cancelInFlightApply() and every dispatch below.
   property int actionGeneration: 0
 
   function connectEthernet() {
@@ -356,12 +282,8 @@ Item {
     actionProc.running = true
   }
 
-  // See WifiSection's identical comment on the same real, confirmed-live
-  // condition. Ethernet's equivalent of "radio off/on" is a disconnect
-  // followed by a reconnect (recoveryPhase tracks which half is in
-  // flight, chained together in actionProc.onExited below since
-  // connectEthernet() can't run until disconnectEthernet()'s own
-  // pendingAction has actually cleared).
+  // Recovers from sustained ping loss with a disconnect followed by a
+  // reconnect. recoveryPhase tracks which half is in flight.
   property bool recovering: false
   property bool recoveryOnCooldown: false
   property string recoveryPhase: ""  // "" | "disconnecting" | "connecting"
@@ -379,16 +301,8 @@ Item {
     onTriggered: root.recoveryOnCooldown = false
   }
 
-  // IPv4 only, and args are passed positionally rather than interpolated
-  // into the script string -- user-typed IP/gateway/DNS values never touch
-  // shell parsing.
-  // A plain `nmcli connection up` on an already-active profile doesn't
-  // reliably force a fresh DHCP negotiation when switching off a static
-  // config -- NetworkManager can treat it as a no-op reapply and leave the
-  // interface sitting disconnected. Cycling down first forces a real
-  // reactivation, and the final `up`'s exit code is no longer swallowed
-  // with `|| true`, so a genuine reconnect failure surfaces as an error
-  // instead of silently reporting success.
+  // IPv4 only. addr/gw/dns are passed positionally, not interpolated into
+  // the script string. Cycles the connection down before bringing it up.
   readonly property string applyIpv4Script:
     "mode=$1; conn=$2; addr=$3; gw=$4; dns=$5\n" +
     "if [[ -z $conn ]]; then echo 'No connection profile' >&2; exit 1; fi\n" +
@@ -427,10 +341,7 @@ Item {
     actionProc.running = true
   }
 
-  // If the cable actually goes live after a failed apply-dhcp/apply-static
-  // (see actionProc.onExited below), redo the same apply automatically --
-  // NetworkManager has nothing active to retry on its own here, since the
-  // failed `connection up` never got as far as creating one.
+  // Redoes the pending apply once the cable goes live.
   onHasCableChanged: {
     if (!hasCable || retryActionOnCarrier === "") return
     var action = retryActionOnCarrier
@@ -439,13 +350,8 @@ Item {
     else if (action === "apply-dhcp") applyDhcp()
   }
 
-  // Separate from the carrier-watch retry above: confirmed live that even
-  // with the cable *already* connected, a failed apply-dhcp/apply-static
-  // can keep failing for a few seconds afterward (NetworkManager settling
-  // from the previous failed activation, not something instant-retry fixes
-  // but also not something worth making the user click Apply repeatedly
-  // for). actionProc.command is left untouched between attempts, so this
-  // just re-fires the exact same command.
+  // Retries a failed apply-dhcp/apply-static up to maxApplyRetries times,
+  // 2s apart, re-firing the same actionProc.command.
   readonly property int maxApplyRetries: 3
   property int applyRetriesLeft: 0
   Timer {
@@ -461,15 +367,11 @@ Item {
     stdout: StdioCollector { id: actionStdout; waitForEnd: true }
     stderr: StdioCollector { id: actionStderr; waitForEnd: true }
     onExited: function(exitCode) {
-      // A process killed by cancelInFlightApply() still exits (delayed);
-      // its dispatchGeneration is now behind root.actionGeneration, so
-      // this is stale -- something newer already took over, ignore it.
+      // Ignores a stale exit from a process cancelInFlightApply() killed.
       if (dispatchGeneration !== root.actionGeneration) return
       var isApplyAction = root.pendingAction === "apply-dhcp" || root.pendingAction === "apply-static"
       if (exitCode !== 0 && isApplyAction && !root.hasCable) {
-        // Genuinely no cable -- don't spend the bounded retry budget on
-        // this, wait for onHasCableChanged instead, which can wait as long
-        // as it actually takes to plug the cable in.
+        // No cable: wait for onHasCableChanged instead of retrying now.
         root.retryActionOnCarrier = root.pendingAction
         root.pendingAction = ""
         root.refresh()
@@ -488,10 +390,7 @@ Item {
           Qt.callLater(function() { root.connectEthernet() })
           return
         }
-        // The disconnect half itself failed -- don't leave recovery wedged
-        // on forever, clear it here too (connect's own completion is what
-        // clears it on the normal path, but that never runs if we don't
-        // even get that far).
+        // The disconnect half failed; clear recovery state here too.
         root.recoveryPhase = ""
         root.recovering = false
         root.recoveryOnCooldown = true
@@ -506,9 +405,8 @@ Item {
       if (exitCode !== 0) {
         root.lastError = String(actionStderr.text || actionStdout.text || "Command failed").trim()
       } else if (root.pendingAction === "apply-static") {
-        // A successful manual apply is done with the raw fields -- collapse
-        // them back like a saved-profile apply never needed to open them.
-        // Left open on failure so the values are still there to fix and retry.
+        // Collapses the manual-entry fields on a successful apply; left
+        // open on failure.
         root.manualEntryOpen = false
       }
       root.pendingAction = ""
@@ -516,21 +414,15 @@ Item {
     }
   }
 
-  // `pingArg` gates the one network probe in here (a single 1s-timeout ping
-  // to 1.1.1.1) behind whether the popup is actually open, so this doesn't
-  // send background pings forever just to keep a closed bar icon updated.
-  // Everything else (carrier/ip/route/nmcli reads) is free, so it always runs.
+  // The ping to 1.1.1.1 (1s timeout) only runs while do_ping is 1 (the
+  // popup is open); carrier/ip/route/nmcli reads always run.
   readonly property string statusScript:
     "iface=$1; do_ping=$2\n" +
     "if [[ -z $iface || ! -e /sys/class/net/$iface ]]; then printf 'state\\tno-device\\n'; exit 0; fi\n" +
     "carrier=$(cat \"/sys/class/net/$iface/carrier\" 2>/dev/null)\n" +
     "speed=$(cat \"/sys/class/net/$iface/speed\" 2>/dev/null)\n" +
     "addr_json=$(ip -4 -j addr show dev \"$iface\" 2>/dev/null)\n" +
-    // A profile can carry a leftover static ipv4.addresses entry that NM
-    // applies as a *secondary* address even under ipv4.method=auto, so the
-    // interface can hold more than one inet address at once. Prefer the one
-    // `ip` flags `dynamic` (the actual DHCP lease) over just taking whichever
-    // address happens to be listed first.
+    // Prefers the address `ip` flags `dynamic` over the first-listed one.
     "read -r ip prefix <<<\"$(printf '%s' \"$addr_json\" | jq -r '\n" +
     "  .[0].addr_info as $a\n" +
     "  | ([$a[] | select(.family==\"inet\" and (.dynamic // false))] + [$a[] | select(.family==\"inet\")])\n" +
@@ -553,11 +445,7 @@ Item {
     "if [[ -r /sys/class/net/$iface/statistics/rx_bytes ]]; then printf 'rx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/rx_bytes)\"; fi\n" +
     "if [[ -r /sys/class/net/$iface/statistics/tx_bytes ]]; then printf 'tx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/tx_bytes)\"; fi\n" +
     "if [[ $do_ping == 1 ]]; then\n" +
-    // -I $iface, not a bare ping to 1.1.1.1: without it this measures
-    // whichever interface currently owns the default route, not this one --
-    // so flipping "Set primary" or disabling the *other* interface would
-    // show packet loss on this row too, even though this interface's own
-    // path never had a problem.
+    // -I $iface scopes the ping to this interface.
     "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
     "  printf 'internet_ping_ms\\t%s\\n' \"${ms:-}\"\n" +
     "fi\n" +
@@ -745,9 +633,7 @@ Item {
         width: parent.width
       }
 
-      // Always visible, not tucked behind a disclosure -- clicking "Static"
-      // is itself what opens the fields below; clicking it again (or
-      // closing the whole panel) is what closes them back up.
+      // DHCP/Static buttons; always visible.
       Row {
         visible: root.hasProfile
         width: parent.width
@@ -784,9 +670,7 @@ Item {
         }
       }
 
-      // The applied static profile's name, if any -- kept visible right
-      // under the DHCP/Static row regardless of whether the fields below
-      // are open, so it doesn't require reopening them just to check.
+      // The applied static profile's name, if any.
       Text {
         textFormat: Text.PlainText
         visible: root.currentProfileName !== ""
@@ -798,8 +682,6 @@ Item {
         width: parent.width
       }
 
-      // Collapsing container, opened/closed only by the Static button (or
-      // the panel closing) -- not by switching back to DHCP mid-edit.
       Item {
         id: staticFormClip
         width: parent.width
@@ -842,9 +724,7 @@ Item {
             foreground: root.bar.foreground
           }
 
-          // Raw address/gateway/DNS fields only matter for typing a
-          // brand-new config or editing one -- applying a saved profile
-          // (above) never needs them, so they stay hidden until asked for.
+          // Reveals the raw address/gateway/DNS fields.
           Button {
             visible: !root.manualEntryOpen
             text: "Enter manually…"
@@ -928,14 +808,7 @@ Item {
         }
       }
 
-  // Static-IP text fields own their own keys while focused -- used by
-  // Panel.qml's PanelKeyCatcher.blocked so h/j/k/l and space type normally.
-  // Gated on manualEntryOpen, not just .activeFocus: a successful apply
-  // collapses the fields asynchronously (see the "apply-static" Process
-  // exit handler above) without anything explicitly blurring them first,
-  // and Qt Quick doesn't clear activeFocus just because an item became
-  // invisible -- without this gate, .activeFocus alone would stay stuck
-  // true forever on a field nobody can even see anymore, and every future
-  // keypress would silently type into it instead of navigating.
+  // True while a static-IP field is focused; used by Panel.qml's
+  // PanelKeyCatcher.blocked. Gated on manualEntryOpen, not just .activeFocus.
   readonly property bool anyFieldFocused: (root.manualEntryOpen && (addressInput.activeFocus || gatewayInput.activeFocus || dnsInput.activeFocus)) || profileList.anyFieldFocused
 }

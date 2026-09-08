@@ -6,10 +6,9 @@ import qs.Commons
 import "Model.js" as Model
 
 // Nearby-network scanning, joining, and forgetting. Uses Quickshell's
-// reactive WifiDevice/WifiNetwork objects directly (network.connect(),
+// reactive WifiDevice/WifiNetwork objects (network.connect(),
 // network.connectWithPsk(), network.forget()) rather than shelling out to
-// nmcli -- Quickshell.Networking already wraps NetworkManager's D-Bus API
-// for this, so there is no status script to write here at all.
+// nmcli.
 Item {
   id: root
 
@@ -17,8 +16,6 @@ Item {
   // The WifiDevice found by the owning WifiSection, or null when there's no
   // Wi-Fi adapter.
   property var device: null
-  // Whether the owning popup is open. The PHY scan the scanner performs has
-  // a real cost, so it only runs while a user is actually looking.
   property bool active: false
   // Index of the row under the keyboard cursor, or -1 when the cursor
   // belongs to some other group (set by WifiSection from Panel.qml's
@@ -28,8 +25,7 @@ Item {
     networkListView.positionViewAtIndex(cursorIndex, ListView.Contain)
   })
 
-  // Keyboard-cursor entry points, mirroring activateRow/forgetRow but by
-  // list position instead of SSID -- WifiSection only knows an index.
+  // Keyboard-cursor entry points, mirroring activateRow/forgetRow by index.
   function activateByIndex(i) {
     var net = wifiNetworks[i]
     if (net) activateRow(net)
@@ -41,50 +37,33 @@ Item {
 
   readonly property var networkObjects: device && device.networks ? device.networks.values : []
   property var wifiNetworks: []
-  // A dense area can turn up dozens of BSSIDs; the list stays capped to
-  // about this many rows tall (scrollable for the rest) instead of pushing
-  // the whole popup taller. Sorting already puts connected/known networks
-  // first (Model.sortWifiRows), so what's visible without scrolling is
-  // always "your" networks before strangers'.
-  readonly property int visibleRowCount: 4
-  // Extra pixels granted beyond the normal cap, set externally (by
-  // WifiSection) when the Ethernet column is taller so the list can grow
-  // downward to match instead of leaving blank space beside it. Never
-  // grows past what's needed to show every network -- see listRenderHeight.
+  // Networks sorted connected/known-first (Model.sortWifiRows); the list is
+  // capped to this many rows tall and scrolls for the rest.
+  readonly property int visibleRowCount: 5
+  // Set by WifiSection to grow the list to match the Ethernet column's
+  // height in two-column mode.
   property real extraHeight: 0
   readonly property real listSpacing: Style.space(8)
   readonly property real listRowEstimate: Style.font.bodySmall + Style.font.caption + Style.space(1) + listSpacing
-  // "Natural" cap -- deliberately independent of extraHeight/listRenderHeight
-  // so WifiSection can read this to compute how much stretch room is left
-  // over without creating a binding loop through the actual rendered height.
   readonly property real listNaturalHeight: Math.min(networkListView.contentHeight, listRowEstimate * visibleRowCount - listSpacing)
   readonly property real listRenderHeight: Math.min(networkListView.contentHeight, listNaturalHeight + extraHeight)
-  // What this component would take up with no stretch applied -- used by
-  // WifiSection to size itself without depending on the (possibly
-  // stretched) actual height, which would be circular.
+  // This component's height with no stretch applied (used by WifiSection).
   readonly property real unstretchedImplicitHeight: wifiNetworks.length === 0
     ? sectionHeaderItem.implicitHeight + column.spacing + emptyStateText.implicitHeight
     : sectionHeaderItem.implicitHeight + column.spacing + listNaturalHeight
 
-  // Per-row in-flight state: at most one action in flight at a time, tracked
-  // by SSID so a row can render "Connecting…" / "Disconnecting…" /
-  // "Forgetting…". This bookkeeping (and the functions below that drive it)
-  // is lifted from the built-in omarchy.network widget's Panel.qml, adapted
-  // to this component's own state instead of that widget's.
+  // Per-row in-flight state: at most one action at a time, tracked by SSID
+  // so a row can render "Connecting…" / "Disconnecting…" / "Forgetting…".
   property string actionSsid: ""
   property string actionKind: ""  // "connect" | "disconnect" | "forget"
   property string failureSsid: ""
   property string failureReason: ""
   readonly property bool busy: actionKind !== ""
 
-  // The row currently expanded into password-entry mode. Kept open across
-  // scan refreshes (by SSID, not index) so a mid-scan update doesn't close
-  // the field the user is typing into.
+  // The row currently expanded into password-entry mode, tracked by SSID.
   property string passwordSsid: ""
   property string passwordText: ""
-  // Set/cleared by the open row delegate's TextField (onActiveFocusChanged)
-  // -- can't reference a delegate-scoped `passwordInput` id from here, it
-  // only exists inside that ListView delegate's own component instance.
+  // Set/cleared by the open row delegate's TextField.
   property bool passwordFieldHasFocus: false
   readonly property bool anyFieldFocused: passwordSsid !== "" && passwordFieldHasFocus
 
@@ -99,10 +78,8 @@ Item {
   implicitWidth: column.implicitWidth
   implicitHeight: column.implicitHeight
 
-  // scannerEnabled lives on the shared WifiDevice (no reference counting),
-  // so track which device this instance turned scanning on for and release
-  // exactly that one -- covers the device being swapped or the section
-  // closing without ever leaving the radio scanning in the background.
+  // Tracks which device this instance turned scanning on for, so it can
+  // release exactly that one.
   property var scannerDevice: null
 
   function setScannerEnabled(enabled) {
@@ -116,11 +93,7 @@ Item {
 
   onActiveChanged: {
     setScannerEnabled(active)
-    // The ListView is a single long-lived instance (this component doesn't
-    // get destroyed between popup opens), so its scroll position would
-    // otherwise carry over from last time -- reopening should always start
-    // back at the top (your connected/known networks), not wherever it was
-    // last scrolled to.
+    // Resets scroll position to the top on reopen.
     if (active) Qt.callLater(function() { networkListView.positionViewAtBeginning() })
   }
   onDeviceChanged: setScannerEnabled(root.active)
@@ -140,8 +113,7 @@ Item {
   }
 
   onWifiNetworksChanged: {
-    // A network that drops out of the scan entirely (moved out of range, AP
-    // restart) shouldn't leave a dangling password field open.
+    // Closes the password field if its network drops out of the scan.
     if (passwordSsid !== "" && wifiIndexForSsid(passwordSsid) < 0) passwordSsid = ""
   }
 
@@ -171,8 +143,6 @@ Item {
   function openPasswordPrompt(ssid) {
     if (passwordSsid !== ssid) passwordText = ""
     passwordSsid = ssid
-    // Focusing the field itself happens in the delegate, which reacts to
-    // isPasswordOpen -- `passwordInput` isn't reachable from this scope.
   }
 
   function cancelPasswordPrompt() {
@@ -232,8 +202,7 @@ Item {
     runNetworkAction("forget", networkForSsid(ssid), function(network) { network.forget() })
   }
 
-  // Row click semantics: connected -> disconnect; needs credentials we don't
-  // have -> open the password prompt; otherwise (open/known) -> connect.
+  // connected -> disconnect; needs credentials -> password prompt; else connect.
   function activateRow(net) {
     if (busy || !net) return
     if (net.connected) { disconnectRow(net.ssid); return }
@@ -242,9 +211,6 @@ Item {
   }
 
   Timer {
-    // Must outlast NetworkManager's ~25s supplicant timeout so a wrong saved
-    // PSK still lands as a real failure instead of hanging "Connecting…"
-    // forever if onConnectionFailed never fires for some reason.
     id: actionTimeout
     interval: 30000
     repeat: false
@@ -286,16 +252,9 @@ Item {
       font.pixelSize: Style.font.bodySmall
     }
 
-    // ListView, not a Repeater: capping height and clipping a plain Column
-    // still lays out every row (just visually hidden), so a dense area's
-    // dozens of BSSIDs would keep scanning/repainting/holding Connections
-    // targets off-screen. ListView only realizes rows near the viewport.
     ListView {
       id: networkListView
       width: parent.width
-      // listRenderHeight = the normal ~visibleRowCount-row cap, plus
-      // whatever extraHeight WifiSection has granted to match the Ethernet
-      // column's height -- never more than contentHeight (all rows shown).
       height: root.listRenderHeight
       spacing: root.listSpacing
       clip: true
@@ -320,9 +279,6 @@ Item {
         readonly property bool isBusy: root.actionKind !== "" && root.actionSsid === net.ssid
         readonly property bool isFailed: root.failureReason !== "" && root.failureSsid === net.ssid
         readonly property bool isPasswordOpen: root.passwordSsid === net.ssid
-        // Not a Button, so there's no built-in hasCursor fill -- paint the
-        // same hover-cursor tone by hand instead of adopting Button just for
-        // this one flag.
         readonly property bool hasCursor: root.cursorIndex === index
 
         Rectangle {
@@ -444,8 +400,6 @@ Item {
           }
         }
 
-        // Collapsing inline password prompt, same clip/animate pattern as
-        // the static-IP form and the saved-profiles "add" row.
         Item {
           id: passwordClip
           width: parent.width
@@ -455,9 +409,6 @@ Item {
 
           Behavior on height { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-          // `passwordInput` is only in scope within this delegate -- this is
-          // the one place that can actually focus it when this row's prompt
-          // opens (root.openPasswordPrompt can't reach it).
           Connections {
             target: rowWrap
             function onIsPasswordOpenChanged() {
@@ -482,10 +433,6 @@ Item {
               text: rowWrap.isPasswordOpen ? root.passwordText : ""
               onTextChanged: if (rowWrap.isPasswordOpen) root.passwordText = text
               onAccepted: if (root.passwordText.length > 0) root.connectWithPassphrase(rowWrap.net.ssid, root.passwordText)
-              // No isPasswordOpen guard: only the one open row's field can
-              // ever hold focus (closed rows are height:0 and invisible, so
-              // Qt Quick can't focus them), so an unconditional update here
-              // can't be clobbered by a different, inactive row.
               onActiveFocusChanged: root.passwordFieldHasFocus = activeFocus
               Keys.onEscapePressed: root.cancelPasswordPrompt()
             }

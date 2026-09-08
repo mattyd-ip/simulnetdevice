@@ -5,12 +5,8 @@ import qs.Ui
 import qs.Commons
 import "Model.js" as Model
 
-// Saved static-IP profiles: name a set of address/gateway/DNS values once,
-// re-apply it later instead of retyping it for every network that needs a
-// fixed IP. Storage lives outside the plugin's own repo/symlink target, at
-// ~/.config/simulnetdevice/profiles.json, via Quickshell.Io.FileView (path/
-// watchChanges/text()/setText() -- confirmed API by reading the real
-// FileView.qml wrapper and quickshell-io.qmltypes).
+// Saved static-IP profiles. Stored at ~/.config/simulnetdevice/profiles.json
+// via Quickshell.Io.FileView.
 Item {
   id: root
 
@@ -19,15 +15,13 @@ Item {
   property string currentAddress: ""
   property string currentGateway: ""
   property string currentDns: ""
-  // Fired when the user picks a profile to apply -- the caller (Ethernet
-  // section) fills its form fields but does not apply to nmcli until its
-  // own Apply button is clicked, same as picking Static fresh.
+  // Fired when the user picks a profile to apply.
   signal applyRequested(var profile)
 
   property var profiles: []
   property bool addingProfile: false
-  // Exposed so the owning popup's PanelKeyCatcher can block h/j/k/l-as-
-  // navigation while the profile-name field is focused.
+  // Used by Panel.qml's PanelKeyCatcher to block navigation while the
+  // profile-name field is focused.
   readonly property bool anyFieldFocused: addingProfile && nameInput.activeFocus
 
   // Row/item under the keyboard cursor (item 0 = Apply, 1 = Delete), or -1
@@ -190,8 +184,6 @@ Item {
       }
     }
 
-    // Collapsing "save current as" row -- a Button that expands into a name
-    // field, same clip/animate pattern as the static-IP form's own reveal.
     Item {
       id: addClip
       width: parent.width
