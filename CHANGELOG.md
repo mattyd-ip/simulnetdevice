@@ -57,3 +57,11 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
   a byte-identical `docs/img/popup-expanded.png`, removing a duplicate
   that had to be kept in sync by hand
   ([`c7c6334`](https://github.com/mattyd-ip/simulnetdevice/commit/c7c6334)).
+
+## 2026-09-08T14:05:03-04:00
+
+### Added
+
+- README now discloses the fixed ping target (`1.1.1.1`, one ICMP echo
+  per status refresh per interface) used for latency/packet-loss
+  ([`3c1ed38`](https://github.com/mattyd-ip/simulnetdevice/commit/3c1ed38)).
