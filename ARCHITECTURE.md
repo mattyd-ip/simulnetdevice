@@ -5,22 +5,11 @@ together, what's original vs. adapted from elsewhere, and the non-obvious
 invariants worth knowing before touching a given file. For end-user docs
 see `README.md`.
 
-## Development setup
+## Testing
 
-After cloning, run once:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-This enables `.githooks/pre-commit` (blocks staged content matching known
-leak patterns) and `.githooks/commit-msg` (strips a stray `Claude-Session:`
-trailer). It's local git config, so it doesn't survive a clone on its own —
-every fresh checkout needs this run again.
-
-`make test` runs the `Model.js` test suite; `make validate` adds `qmllint`
-and `omarchy plugin validate`, both of which need a local Omarchy install
-and so only run there, not in CI.
+`make test` runs the `Model.js` test suite. `make validate` adds
+`qmllint` and `omarchy plugin validate`, both of which need a local
+Omarchy install and so only run there, not in CI.
 
 ## Repo layout
 
