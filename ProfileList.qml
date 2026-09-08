@@ -8,7 +8,7 @@ import "Model.js" as Model
 // Saved static-IP profiles: name a set of address/gateway/DNS values once,
 // re-apply it later instead of retyping it for every network that needs a
 // fixed IP. Storage lives outside the plugin's own repo/symlink target, at
-// ~/.config/netctl/profiles.json, via Quickshell.Io.FileView (path/
+// ~/.config/simulnetdevice/profiles.json, via Quickshell.Io.FileView (path/
 // watchChanges/text()/setText() -- confirmed API by reading the real
 // FileView.qml wrapper and quickshell-io.qmltypes).
 Item {
@@ -49,7 +49,7 @@ Item {
   implicitWidth: column.implicitWidth
   implicitHeight: column.implicitHeight
 
-  readonly property string profilesPath: (Quickshell.env("HOME") || "") + "/.config/netctl/profiles.json"
+  readonly property string profilesPath: (Quickshell.env("HOME") || "") + "/.config/simulnetdevice/profiles.json"
 
   FileView {
     id: file
@@ -63,7 +63,7 @@ Item {
   // FileView doesn't create missing parent directories on its own.
   Process {
     id: ensureDirProc
-    command: ["mkdir", "-p", (Quickshell.env("HOME") || "") + "/.config/netctl"]
+    command: ["mkdir", "-p", (Quickshell.env("HOME") || "") + "/.config/simulnetdevice"]
   }
 
   function persist() {

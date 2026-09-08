@@ -10,7 +10,7 @@ see `README.md`; for the dev loop and forward-looking notes see
 
 | File | Responsibility |
 |---|---|
-| `manifest.json` | Plugin manifest (id `netctl`, bar-widget) |
+| `manifest.json` | Plugin manifest (id `simulnetdevice`, bar-widget) |
 | `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison, owns the keyboard-cursor controller and the `omarchy.network` conflict banner |
 | `WifiSection.qml` | Wi-Fi status, radio toggle, band selection, primary-route control, nearby-network list |
 | `EthernetSection.qml` | Ethernet status, connect/disconnect, DHCP/Static form, primary-route control |
@@ -115,7 +115,7 @@ caching a one-time answer or hardcoding an assumption about a typical
 install. `canDisable` gates whether the "Disable it" button even appears --
 if a future Omarchy version marks it non-disableable, the fallback text is
 still correct. Dismissal ("Keep both") is a marker file
-(`~/.config/netctl/hide-network-conflict-notice`), not an in-memory flag,
+(`~/.config/simulnetdevice/hide-network-conflict-notice`), not an in-memory flag,
 so choosing to run both is remembered across restarts, not just for one
 session.
 
@@ -133,11 +133,11 @@ scanning off for the other too; this is non-critical for a different
 reason than everything else above — it self-heals the moment either popup
 reopens (which refreshes its own scan state), so at worst you see a stale
 nearby-networks list for a moment, not lost or corrupted state. This is
-the one exception netctl's banner exists to surface at all.
+the one exception SimulNetDevice's banner exists to surface at all.
 
 ## What's original vs. adapted from `omarchy.network`
 
-netctl started as a clone of the built-in `omarchy.network` plugin and
+SimulNetDevice started as a clone of the built-in `omarchy.network` plugin and
 diverged substantially. When reviewing a diff near one of these spots, it's
 worth knowing which side of that line it's on:
 
@@ -160,7 +160,7 @@ worth knowing which side of that line it's on:
   `StatsGrid` instance can own an independent per-interface history
   instead of one shared default-route sample.
 
-**Original to netctl**, with no equivalent in the built-in plugin:
+**Original to SimulNetDevice**, with no equivalent in the built-in plugin:
 - The entire dual-simultaneous-interface architecture described above —
   the built-in plugin is single-interface-at-a-time by design.
 - "Set primary" / route-metric pinning in its entirety.
@@ -171,12 +171,12 @@ worth knowing which side of that line it's on:
 - The keyboard-navigation architecture (`Panel.qml`'s central cursor
   controller). The built-in plugin also has vim-style navigation, but it's
   one flat `focusSection` state machine over a single network's controls;
-  netctl's two independent, side-by-side-or-stacked sections needed a
+  SimulNetDevice's two independent, side-by-side-or-stacked sections needed a
   different shape (a controller that hands a cursor between two sections
   that stay unaware of each other) rather than anything portable from the
   built-in's model — see "Keyboard navigation" above.
 - The `omarchy.network` conflict banner. The built-in plugin has no
-  equivalent — it has no reason to check for netctl's existence.
+  equivalent — it has no reason to check for SimulNetDevice's existence.
 
 **Delegates to an existing system tool rather than reimplementing it**:
 Wi-Fi band selection (`WifiSection.qml`) shells out to

@@ -4,7 +4,7 @@ import qs.Ui
 import qs.Commons
 import "Model.js" as Model
 
-// Bar icon + popup shell for netctl. Wi-Fi and Ethernet each get their own
+// Bar icon + popup shell for SimulNetDevice. Wi-Fi and Ethernet each get their own
 // self-contained section component (EthernetSection.qml, WifiSection.qml)
 // that query their own interface directly rather than the default route --
 // that's the whole reason this plugin exists instead of the built-in
@@ -13,8 +13,8 @@ import "Model.js" as Model
 // both are connected at once.
 Panel {
   id: root
-  moduleName: "netctl"
-  ipcTarget: "netctl"
+  moduleName: "simulnetdevice"
+  ipcTarget: "simulnetdevice"
   manageIpc: false
 
   // Bar icon: whichever interface is primary wins when both are connected;
@@ -186,7 +186,7 @@ Panel {
     "enabled=$(omarchy plugin list --json | jq -r '.[] | select(.id==\"omarchy.network\") | .enabled')\n" +
     "can_disable=$(omarchy plugin list --json | jq -r '.[] | select(.id==\"omarchy.network\") | .canDisable')\n" +
     "dismissed=0\n" +
-    "[[ -f \"$HOME/.config/netctl/hide-network-conflict-notice\" ]] && dismissed=1\n" +
+    "[[ -f \"$HOME/.config/simulnetdevice/hide-network-conflict-notice\" ]] && dismissed=1\n" +
     "printf 'enabled\\t%s\\n' \"${enabled:-false}\"\n" +
     "printf 'canDisable\\t%s\\n' \"${can_disable:-false}\"\n" +
     "printf 'dismissed\\t%s\\n' \"$dismissed\"\n"
@@ -215,12 +215,12 @@ Panel {
 
   // "Keep both" -- remembered permanently (not just for this session), so
   // choosing to run both deliberately doesn't mean seeing this banner on
-  // every single open. Nothing else in netctl reads this marker; deleting
-  // ~/.config/netctl/hide-network-conflict-notice brings the notice back.
+  // every single open. Nothing else in SimulNetDevice reads this marker; deleting
+  // ~/.config/simulnetdevice/hide-network-conflict-notice brings the notice back.
   function dismissConflictNotice() {
     if (dismissConflictProc.running) return
     dismissConflictProc.command = ["bash", "-c",
-      "mkdir -p \"$HOME/.config/netctl\" && touch \"$HOME/.config/netctl/hide-network-conflict-notice\""]
+      "mkdir -p \"$HOME/.config/simulnetdevice\" && touch \"$HOME/.config/simulnetdevice/hide-network-conflict-notice\""]
     dismissConflictProc.running = true
   }
 
@@ -230,7 +230,7 @@ Panel {
   }
 
   IpcHandler {
-    target: "netctl"
+    target: "simulnetdevice"
     function open() { root.open() }
     function close() { root.close() }
     function show() { root.open() }

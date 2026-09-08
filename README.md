@@ -1,4 +1,4 @@
-# netctl
+# SimulNetDevice
 
 An Omarchy (Quickshell) plugin for managing Wi-Fi and Ethernet
 independently, at the same time.
@@ -8,7 +8,7 @@ independently, at the same time.
 The built-in `omarchy.network` plugin only ever reports on whichever
 interface currently owns the default route. If Wi-Fi and Ethernet are both
 connected — two different networks, say — the built-in plugin shows exactly
-one of them and hides the other entirely. Every status query in netctl is
+one of them and hides the other entirely. Every status query in SimulNetDevice is
 scoped directly to a specific interface instead, so both show up correctly
 no matter which one is carrying the default route.
 
@@ -17,12 +17,12 @@ The built-in plugin is left untouched and can be re-enabled as a fallback
 
 ## Running alongside the built-in plugin
 
-You don't have to disable `omarchy.network` to use netctl. If it's still
-enabled, netctl shows a small banner with a "Disable it" button (or the
+You don't have to disable `omarchy.network` to use SimulNetDevice. If it's still
+enabled, SimulNetDevice shows a small banner with a "Disable it" button (or the
 equivalent `omarchy plugin disable omarchy.network` command, if you'd
 rather run it yourself) and a "Keep both" button that remembers your
 choice for good — it won't ask again unless you delete
-`~/.config/netctl/hide-network-conflict-notice`.
+`~/.config/simulnetdevice/hide-network-conflict-notice`.
 
 Running both at once is safe day to day. The one thing to know: if both
 popups happen to be open at the same time, Wi-Fi network scanning can
@@ -40,8 +40,8 @@ omarchy plugin add <this-repo's-git-url> --enable
 Or, from a local clone:
 
 ```bash
-git clone <this-repo's-git-url> ~/.config/omarchy/plugins/netctl
-omarchy plugin enable netctl
+git clone <this-repo's-git-url> ~/.config/omarchy/plugins/simulnetdevice
+omarchy plugin enable simulnetdevice
 ```
 
 ## Current features
@@ -75,7 +75,7 @@ omarchy plugin enable netctl
   once (e.g. "Office LAN") and re-apply it later with one click (applies
   immediately — no need to open the manual-entry fields) instead of
   retyping it every time you're back on a network that needs a fixed IP.
-  Stored at `~/.config/netctl/profiles.json`, separate from this repo.
+  Stored at `~/.config/simulnetdevice/profiles.json`, separate from this repo.
   Whichever profile matches the currently-applied config shows right
   under the DHCP/Static buttons (e.g. "homelab-management"), visible even
   with the fields collapsed.
@@ -119,7 +119,7 @@ second adapter of the same type, non-Arch systems, etc.).
   ground.
 - **One Wi-Fi + one Ethernet interface, assumed.** A second adapter of the
   same type (a second Wi-Fi card, or an onboard + dock/USB Ethernet NIC) is
-  invisible to netctl — no error, it just never appears.
+  invisible to SimulNetDevice — no error, it just never appears.
 
 ## Troubleshooting
 
@@ -139,7 +139,7 @@ change a setting in the panel:
 - **Ethernet**: reseat the cable (unplug and replug it), or apply a
   **Static IPv4** profile for the network instead of DHCP.
 
-This isn't something netctl or NetworkManager detects or fixes on its
+This isn't something SimulNetDevice or NetworkManager detects or fixes on its
 own. It's a lower-level issue with how this particular combination of
 plugin, NetworkManager, OS, and this workstation's hardware handles the
 connection — not something seen with other similar tools.
