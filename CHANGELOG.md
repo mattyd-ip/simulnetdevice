@@ -65,3 +65,11 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 - README now discloses the fixed ping target (`1.1.1.1`, one ICMP echo
   per status refresh per interface) used for latency/packet-loss
   ([`3c1ed38`](https://github.com/mattyd-ip/simulnetdevice/commit/3c1ed38)).
+
+## 2026-09-08T14:17:22-04:00
+
+### Changed
+
+- Reworded the connectivity-check note to state only current behavior,
+  removing a phrase that hinted at planned work
+  ([`cb7b05d`](https://github.com/mattyd-ip/simulnetdevice/commit/cb7b05d)).
