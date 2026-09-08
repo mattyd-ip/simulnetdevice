@@ -12,7 +12,7 @@
   },
   "barWidget": {
     "displayName": "Net Control",
-    "description": "Independent Wi-Fi and Ethernet status/control, unlike the built-in Network widget which only reports the default-route interface.",
+    "description": "Independent Wi-Fi and Ethernet status/control, unlike the built-in Network plugin which only reports the default-route interface.",
     "category": "Network",
     "allowMultiple": false,
     "defaultSection": "right"

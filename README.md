@@ -1,21 +1,21 @@
 # netctl
 
-An Omarchy (Quickshell) bar widget for managing Wi-Fi and Ethernet
+An Omarchy (Quickshell) plugin for managing Wi-Fi and Ethernet
 independently, at the same time.
 
 ## Why this exists
 
-The built-in `omarchy.network` widget only ever reports on whichever
+The built-in `omarchy.network` plugin only ever reports on whichever
 interface currently owns the default route. If Wi-Fi and Ethernet are both
-connected — two different networks, say — the built-in widget shows exactly
+connected — two different networks, say — the built-in plugin shows exactly
 one of them and hides the other entirely. Every status query in netctl is
 scoped directly to a specific interface instead, so both show up correctly
 no matter which one is carrying the default route.
 
-The built-in widget is left untouched and can be re-enabled as a fallback
+The built-in plugin is left untouched and can be re-enabled as a fallback
 (`omarchy plugin enable omarchy.network`) if this one ever breaks.
 
-## Running alongside the built-in widget
+## Running alongside the built-in plugin
 
 You don't have to disable `omarchy.network` to use netctl. If it's still
 enabled, netctl shows a small banner with a "Disable it" button (or the
@@ -91,30 +91,30 @@ omarchy plugin enable netctl
   to the other column when Wi-Fi and Ethernet are side by side, `Space`/
   `Enter` activates whatever's highlighted, `x` forgets a highlighted
   Wi-Fi network or deletes a highlighted saved Ethernet profile, `Tab`
-  switches to the next bar widget, and `Escape` closes the popup (or
+  switches to the next plugin, and `Escape` closes the popup (or
   cancels a password/profile-name entry while typing).
 
 ## Tested on
 
-Omarchy 4.0.2 (Arch Linux, kernel 7.1.9-arch1-2), NetworkManager (`nmcli`
-1.58.1), one Wi-Fi adapter + one wired Ethernet adapter. See Known
-limitations below for what's untested (a second adapter of the same type,
-non-Arch systems, etc.).
+Omarchy 4.0.2 (Arch Linux, kernel 7.1.9-arch1-2) on a Lenovo ThinkPad E15
+Gen 2, NetworkManager (`nmcli` 1.58.1), one Wi-Fi adapter + one wired
+Ethernet adapter. See Known limitations below for what's untested (a
+second adapter of the same type, non-Arch systems, etc.).
 
-## Known limitations / non-goals (for now)
+## Known limitations
 
 - **No WPA-Enterprise (802.1x) networks.** Scanning/joining covers
   WPA2/WPA3-Personal, WEP, and open/OWE networks. Enterprise networks (the
   kind that ask for an identity + password, common on corporate/campus
-  Wi-Fi) still need the built-in `omarchy.network` widget.
+  Wi-Fi) still need the built-in `omarchy.network` plugin.
 - **No QR-code Wi-Fi sharing, speed test shortcut, or system-wide DNS
-  provider quick-switch.** These stay the built-in widget's job for now
-  (the first two are just shortcut buttons to the separate `omarchy.wifiqr`
-  and `omarchy.speedtest` plugins, both still reachable on their own if
+  provider quick-switch.** These are the built-in plugin's job (the first
+  two are just shortcut buttons to the separate `omarchy.wifiqr` and
+  `omarchy.speedtest` plugins, both still reachable on their own if
   enabled; the DNS quick-switch changes DNS for the whole system, not one
-  interface, which is out of scope here).
+  interface).
 - **IPv4 only.** No IPv6 configuration.
-- **Static-IP profiles are Ethernet-only right now.**
+- **Static-IP profiles are Ethernet-only.**
 - **No per-process bandwidth monitoring.** Other plugins already cover this
   ground.
 - **One Wi-Fi + one Ethernet interface, assumed.** A second adapter of the
@@ -123,19 +123,23 @@ non-Arch systems, etc.).
 
 ## Troubleshooting
 
-**Connection shows "Connected" but Gateway is blank, and you lose all
-network access if the other interface goes down.**
+**Ping spikes, packet loss, or a blank Gateway (including a connection
+that shows "Connected" but has no real network access)** — most often
+right after changing a connection or a setting (switching networks,
+toggling the radio, applying a static IP, and similar).
 
-This means the DHCP server on the router isn't sending a gateway in that
-lease, so the interface can only reach its own subnet, not the internet.
-It's not something netctl or NetworkManager can detect or fix
-automatically, and the fix differs by interface:
+Start by closing and reopening the panel — this refreshes every value
+from scratch and clears up most of these on its own. If it doesn't, the
+fix is to actually drop and re-establish the physical link, not just
+change a setting in the panel:
 
-- **Wi-Fi**: disconnect and reconnect the network (toggle the radio off/on,
-  or reconnect from the nearby-networks list). This forces a fresh 802.11
-  association and a new DHCP lease.
-- **Ethernet**: switching back to DHCP from this widget already forces a
-  fresh DHCP request, but some routers only hand out a complete lease on an
-  actual link down/up, which nothing here can trigger without root. Two
-  options: apply a **Static IPv4** profile with an address/gateway you
-  already know are correct, or **physically unplug and replug the cable**.
+- **Wi-Fi**: toggle the radio off and back on (from the panel, or
+  physically if your device has a hardware switch), disconnect and
+  reconnect to the same network, or connect to a different SSID and back.
+- **Ethernet**: reseat the cable (unplug and replug it), or apply a
+  **Static IPv4** profile for the network instead of DHCP.
+
+This isn't something netctl or NetworkManager detects or fixes on its
+own. It's a lower-level issue with how this particular combination of
+plugin, NetworkManager, OS, and this workstation's hardware handles the
+connection — not something seen with other similar tools.

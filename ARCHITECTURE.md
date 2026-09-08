@@ -27,8 +27,8 @@ see `README.md`; for the dev loop and forward-looking notes see
 object, `Process`/`Timer` polling, and form state. Neither reads the
 default route — every status query is scoped directly to that section's
 own interface (`ip`/`nmcli ... dev $iface`), which is the entire reason
-this plugin exists instead of the built-in `omarchy.network` widget (that
-widget reports only whichever interface currently owns the default route,
+this plugin exists instead of the built-in `omarchy.network` plugin (that
+plugin reports only whichever interface currently owns the default route,
 so a second connected interface is invisible in it). `Panel.qml` is a thin
 shell: it instantiates one of each section, lays them out in a `Grid`
 (1 or 2 columns depending on `twoColumn`), and picks the bar icon.
@@ -51,9 +51,7 @@ cut the machine's own active connection.
 **Per-instance state, not singletons.** Because each section is a normal
 QML component instance rather than a global/singleton, its `info`,
 `actionProc`, retry/recovery timers, and `actionGeneration` counter are
-naturally isolated per instance. This is what would make a future
-`Repeater`-based multi-device version "free" for state management, even
-though the route-metric logic above is not free.
+naturally isolated per instance, with nothing shared across sections.
 
 **`Model.js` holds all the pure logic.** Parsing (`parseKeyValue`),
 formatting, validation, and the throughput/ping/route-metric/profile math
@@ -106,13 +104,13 @@ mode) always lands on item 0 regardless of direction, since a group isn't
 a row with a "near" and "far" end the way items in a group are.
 
 Deliberately out of scope: mouse hover does not move the keyboard cursor
-(unlike the built-in widget), so the two coexist without needing to be
+(unlike the built-in plugin), so the two coexist without needing to be
 unified.
 
 **The `omarchy.network` conflict banner checks, it doesn't assume.**
 `Panel.qml` shells out to `omarchy plugin list --json | jq` on every open
 (not polled continuously -- this doesn't change while the popup is up) to
-read the built-in widget's actual `enabled`/`canDisable` state, rather than
+read the built-in plugin's actual `enabled`/`canDisable` state, rather than
 caching a one-time answer or hardcoding an assumption about a typical
 install. `canDisable` gates whether the "Disable it" button even appears --
 if a future Omarchy version marks it non-disableable, the fallback text is
@@ -121,10 +119,10 @@ still correct. Dismissal ("Keep both") is a marker file
 so choosing to run both is remembered across restarts, not just for one
 session.
 
-There's no real conflict for anything either widget changes on purpose —
+There's no real conflict for anything either plugin changes on purpose —
 route-metric writes, band pinning, DHCP/Static, connect/disconnect — since
 all of that goes through `nmcli` against NetworkManager's own state, and
-NetworkManager is the single source of truth both widgets just read back;
+NetworkManager is the single source of truth both plugins just read back;
 neither can leave the other showing stale or contradictory state. The one
 actual exception is Wi-Fi scanning, controlled by
 `WifiDevice.scannerEnabled` — a flag that lives outside NetworkManager
@@ -139,11 +137,11 @@ the one exception netctl's banner exists to surface at all.
 
 ## What's original vs. adapted from `omarchy.network`
 
-netctl started as a clone of the built-in `omarchy.network` widget and
+netctl started as a clone of the built-in `omarchy.network` plugin and
 diverged substantially. When reviewing a diff near one of these spots, it's
 worth knowing which side of that line it's on:
 
-**Lifted essentially unchanged** from the built-in widget's `Panel.qml`:
+**Lifted essentially unchanged** from the built-in plugin's `Panel.qml`:
 - `findDevice(type)` in both `WifiSection.qml` and `EthernetSection.qml` —
   picks the connected device of a given `DeviceType`, else the
   first-enumerated one. This is the reason a second same-type NIC isn't
@@ -152,9 +150,9 @@ worth knowing which side of that line it's on:
   (`networkForSsid`, `wifiIndexForSsid`, `runNetworkAction`,
   `clearNetworkAction`, `failNetworkAction`, `checkActionCompletion`) —
   adapted to this component's own state, but the logic and structure are
-  the built-in widget's.
+  the built-in plugin's.
 
-**Ported and then refactored** from the built-in widget's `Model.js`:
+**Ported and then refactored** from the built-in plugin's `Model.js`:
 - Throughput-rate delta math (`throughputState`) and ping/packet-loss
   rolling-average math (`pingLatencyState` and friends) — same approach
   and tuned constants (e.g. `pingHistoryWindow: 24`, `pingAverageWindow:
@@ -162,28 +160,28 @@ worth knowing which side of that line it's on:
   `StatsGrid` instance can own an independent per-interface history
   instead of one shared default-route sample.
 
-**Original to netctl**, with no equivalent in the built-in widget:
+**Original to netctl**, with no equivalent in the built-in plugin:
 - The entire dual-simultaneous-interface architecture described above —
-  the built-in widget is single-interface-at-a-time by design.
+  the built-in plugin is single-interface-at-a-time by design.
 - "Set primary" / route-metric pinning in its entirety.
 - DHCP/Static IPv4 toggle and saved static-IP profiles (`ProfileList.qml`).
 - Ethernet connect/disconnect.
 - All of `EthernetSection.qml`'s status-parsing shell script and retry/
   recovery logic.
 - The keyboard-navigation architecture (`Panel.qml`'s central cursor
-  controller). The built-in widget also has vim-style navigation, but it's
+  controller). The built-in plugin also has vim-style navigation, but it's
   one flat `focusSection` state machine over a single network's controls;
   netctl's two independent, side-by-side-or-stacked sections needed a
   different shape (a controller that hands a cursor between two sections
   that stay unaware of each other) rather than anything portable from the
   built-in's model — see "Keyboard navigation" above.
-- The `omarchy.network` conflict banner. The built-in widget has no
+- The `omarchy.network` conflict banner. The built-in plugin has no
   equivalent — it has no reason to check for netctl's existence.
 
 **Delegates to an existing system tool rather than reimplementing it**:
 Wi-Fi band selection (`WifiSection.qml`) shells out to
-`omarchy-network-band`, the same standalone CLI the built-in widget's own
-band picker uses — neither widget reimplements the `iw`/`nmcli` band-pinning
+`omarchy-network-band`, the same standalone CLI the built-in plugin's own
+band picker uses — neither plugin reimplements the `iw`/`nmcli` band-pinning
 logic; this one just polls its status output and forwards clicks to it.
 
 **Framework boilerplate that looks borrowed but isn't**: the
