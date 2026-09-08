@@ -71,3 +71,17 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 
 - Tightened the wording of the README's connectivity-check note
   ([`cb7b05d`](https://github.com/mattyd-ip/simulnetdevice/commit/cb7b05d)).
+
+## 2026-09-08T15:16:45-04:00
+
+### Removed
+
+- Stopped tracking `CLAUDE.md` and `.githooks/`
+  ([`e50ee4d`](https://github.com/mattyd-ip/simulnetdevice/commit/e50ee4d),
+  [`ac41f51`](https://github.com/mattyd-ip/simulnetdevice/commit/ac41f51)).
+
+### Changed
+
+- Replaced ARCHITECTURE.md's "Development setup" section with a shorter
+  testing note
+  ([`6768163`](https://github.com/mattyd-ip/simulnetdevice/commit/6768163)).
