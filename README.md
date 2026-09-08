@@ -97,6 +97,13 @@ place; add `rm -rf ~/.config/simulnetdevice` to also clear those.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what's changed recently.
 
+## Connectivity check
+
+Ping latency and packet loss are measured against a fixed public address,
+`1.1.1.1` (Cloudflare) — one ICMP echo per status refresh, per interface.
+This isn't configurable yet. It's the same target the built-in
+`omarchy.network` plugin already pings for the same purpose.
+
 ## Tested on
 
 Omarchy 4.0.2 (Arch Linux, kernel 7.1.9-arch1-2) on a Lenovo ThinkPad E15
