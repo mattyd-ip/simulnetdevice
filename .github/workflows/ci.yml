@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate manifest.json is well-formed
+        run: node -e 'require("./manifest.json")'
+
+      # Model.js's pure functions need nothing but node, so that's what
+      # runs here.
+      #
+      # Two gates stay local instead (see DEVELOPMENT.md / `make validate`):
+      # qmllint needs the Omarchy shell's qs.Ui / qs.Commons on its import
+      # path, and `omarchy plugin validate` needs the omarchy CLI itself --
+      # neither exists on a plain runner, so running them here would just
+      # report on paths that don't match how the plugin actually loads.
+      - name: Test Model.js
+        run: make test
