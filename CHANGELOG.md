@@ -29,4 +29,16 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 
 ---
 
-No entries yet — this file starts once the repo is public.
+## 2026-09-08T13:25:56-04:00
+
+### Added
+
+- A bug report issue template, with the exact terminal commands to gather
+  the version, network state, and debug log a report needs
+  ([`392f2d2`](https://github.com/mattyd-ip/simulnetdevice/commit/392f2d2)).
+
+### Changed
+
+- README: added Uninstall instructions and a dependency list, filling
+  gaps in the plugin marketplace's submission checklist
+  ([`392f2d2`](https://github.com/mattyd-ip/simulnetdevice/commit/392f2d2)).
