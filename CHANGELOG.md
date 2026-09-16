@@ -41,6 +41,12 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
   happening
   ([`701f4c5`](https://github.com/mattyd-ip/simulnetdevice/commit/701f4c5)).
 
+### Changed
+
+- Manifest and README descriptions updated to mention more of the
+  plugin's features
+  ([`1acb450`](https://github.com/mattyd-ip/simulnetdevice/commit/1acb450)).
+
 ## 2026-09-15T21:48:38-04:00
 
 ### Added
