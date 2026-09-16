@@ -42,6 +42,19 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
   [`2b0a997`](https://github.com/mattyd-ip/simulnetdevice/commit/2b0a997),
   [`d7346f0`](https://github.com/mattyd-ip/simulnetdevice/commit/d7346f0)).
 
+### Changed
+
+- Manifest version bumped to `0.2.0`, and the plugin-marketplace
+  description expanded to also mention Wi-Fi scanning and
+  ping/throughput, alongside the existing static-IP-profiles and
+  primary-routing mentions
+  ([`74910e7`](https://github.com/mattyd-ip/simulnetdevice/commit/74910e7),
+  [`655eaa5`](https://github.com/mattyd-ip/simulnetdevice/commit/655eaa5)).
+- README screenshot now shows the ping-target editor open, instead of
+  only the Static IPv4 panel
+  ([`21aabf3`](https://github.com/mattyd-ip/simulnetdevice/commit/21aabf3),
+  [`431bbb2`](https://github.com/mattyd-ip/simulnetdevice/commit/431bbb2)).
+
 ## 2026-09-08T13:25:56-04:00
 
 Prepared for submission to the Omarchy plugin marketplace.
