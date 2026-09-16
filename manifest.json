@@ -5,14 +5,14 @@
   "version": "0.2.1",
   "author": "mattyd-ip",
   "license": "MIT",
-  "description": "Independent Wi-Fi + Ethernet status, ping, and throughput at the same time, plus Wi-Fi scanning, saved static-IP profiles, and primary-interface routing control.",
+  "description": "Wi-Fi (wireless/WLAN) and Ethernet (wired/LAN) network status, connection state, internet ping, packet loss, and download/upload speed for dual/multiple network connections — live and simultaneous via NetworkManager — plus wireless network scanning, DHCP/static-IP address, gateway, and DNS configuration with saved profiles, primary-interface routing control, and Wi-Fi band selection.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "Panel.qml"
   },
   "barWidget": {
     "displayName": "SimulNetDevice",
-    "description": "Independent Wi-Fi + Ethernet status, ping, and throughput at the same time, plus Wi-Fi scanning, saved static-IP profiles, and primary-interface routing control.",
+    "description": "Wi-Fi (wireless/WLAN) and Ethernet (wired/LAN) network status, connection state, internet ping, packet loss, and download/upload speed for dual/multiple network connections — live and simultaneous via NetworkManager — plus wireless network scanning, DHCP/static-IP address, gateway, and DNS configuration with saved profiles, primary-interface routing control, and Wi-Fi band selection.",
     "category": "Network",
     "allowMultiple": false,
     "defaultSection": "right"

@@ -1,7 +1,8 @@
 # SimulNetDevice
 
-An Omarchy (Quickshell) plugin for managing Wi-Fi and Ethernet
-independently, at the same time.
+An Omarchy (Quickshell) plugin for managing Wi-Fi (wireless/WLAN) and
+Ethernet (wired/LAN) independently, at the same time — for dual/multiple
+network connections.
 
 **Static IPv4 and ping-target editors expanded**
 
