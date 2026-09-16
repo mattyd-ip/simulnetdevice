@@ -16,10 +16,10 @@ Omarchy install and so only run there, not in CI.
 | File | Responsibility |
 |---|---|
 | `manifest.json` | Plugin manifest (id `simulnetdevice`, bar-widget) |
-| `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison, owns the keyboard-cursor controller and the `omarchy.network` conflict banner |
+| `Panel.qml` | Bar icon + popup shell; combines both sections, cross-wires primary-route comparison, owns the keyboard-cursor controller, the `omarchy.network` conflict banner, and the ping-target settings file |
 | `WifiSection.qml` | Wi-Fi status, radio toggle, band selection, primary-route control, nearby-network list |
 | `EthernetSection.qml` | Ethernet status, connect/disconnect, DHCP/Static form, primary-route control |
-| `StatsGrid.qml` | Shared per-interface ping/throughput/IP/gateway grid |
+| `StatsGrid.qml` | Shared per-interface ping/throughput/IP/gateway grid, plus that interface's ping-target editor |
 | `ProfileList.qml` | Saved static-IP profiles UI + JSON persistence |
 | `WifiScanList.qml` | Nearby-network scan list, join/password prompt, forget |
 | `Model.js` | Pure parsing/formatting/validation helpers (testable under plain `node`) |
@@ -47,6 +47,19 @@ generalize to more than two interfaces without a rewrite.
 component instance rather than a global/singleton, so its `info`,
 `actionProc`, retry/recovery timers, and `actionGeneration` counter are
 isolated per instance, with nothing shared across sections.
+
+**The ping target is per-interface state, but the settings file is
+owned centrally.** Each `StatsGrid.qml` instance has its own `pingTarget`
+and its own gear-triggered editor, so Wi-Fi and Ethernet can ping
+different addresses. `Panel.qml` still owns the single `FileView` on
+`~/.config/simulnetdevice/settings.json` (`wifiPingTarget`,
+`ethernetPingTarget`, `linkPingTargets`) rather than giving each section
+its own file watcher — one file with two writers would race. A save from
+either section's editor calls up through its own `pingTargetSaveRequested`
+signal to `Panel.qml`'s `setPingTarget(section, value)`, which applies it
+to one or both targets depending on `linkPingTargets` and persists.
+Turning `linkPingTargets` on snaps both values to whichever section's
+toggle triggered it, so "linked" never leaves them silently mismatched.
 
 **`Model.js` holds all the pure logic.** Parsing (`parseKeyValue`),
 formatting, validation, and the throughput/ping/route-metric/profile math
@@ -151,6 +164,8 @@ worth knowing which side of that line it's on:
   above.
 - The `omarchy.network` conflict banner. The built-in plugin has no
   equivalent.
+- The configurable, per-interface ping target with an optional shared
+  mode. The built-in plugin's ping target is hardcoded.
 
 **Delegates to an existing system tool rather than reimplementing it**:
 Wi-Fi band selection (`WifiSection.qml`) shells out to
@@ -198,3 +213,10 @@ conventions every Omarchy shell plugin uses, not anything specific to
   (`manualEntryOpen`, `addingProfile`, `passwordSsid !== ""`), not the
   field's raw `.activeFocus` alone. `Panel.qml`'s key catcher reclaims
   focus for itself the moment that gate clears.
+- **`StatsGrid.qml`'s `pingTargetDraft` re-syncs on every `pingTarget`
+  change, not just when the editor opens.** Without this, a linked edit
+  saved from the sibling section wouldn't show up in an already-open
+  editor until it was closed and reopened. The same handler also clears
+  ping sample history on a target change, so the rolling latency average
+  doesn't blend samples pinging the old target with samples pinging the
+  new one.

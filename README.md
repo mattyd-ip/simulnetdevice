@@ -59,8 +59,9 @@ omarchy plugin remove simulnetdevice
 
 This disables and removes the plugin (backing up the folder first if it
 wasn't a git checkout). It leaves `~/.config/simulnetdevice/` — saved
-static-IP profiles and the "keep both" conflict-banner preference — in
-place; add `rm -rf ~/.config/simulnetdevice` to also clear those.
+static-IP profiles, the ping-target setting, and the "keep both"
+conflict-banner preference — in place; add `rm -rf
+~/.config/simulnetdevice` to also clear those.
 
 ## Current features
 
@@ -70,6 +71,11 @@ place; add `rm -rf ~/.config/simulnetdevice` to also clear those.
   than shared from one default-route sample. Both show as side-by-side
   columns while both are connected, dropping to a single column the
   moment either one isn't.
+- **Configurable ping target** — each interface pings a configurable
+  IPv4 address (default `1.1.1.1`) for its latency/packet-loss stats.
+  Click the gear next to "Ping" to change it, or turn on "Shared
+  Ping-target" to keep both interfaces on the same address instead of
+  setting each independently.
 - **Set primary** — choose which connected network actually carries your
   internet traffic, instead of NetworkManager's built-in
   wired-always-wins default. Lets Wi-Fi stay primary with a cable
@@ -99,15 +105,18 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what's changed recently.
 
 ## Connectivity check
 
-Ping latency and packet loss are measured against a fixed public address,
-`1.1.1.1` (Cloudflare) — one ICMP echo per status refresh, per interface.
-It's the same target the built-in `omarchy.network` plugin already pings
-for the same purpose.
+Ping latency and packet loss are measured against a configurable IPv4
+address per interface — one ICMP echo per status refresh. Both default
+to `1.1.1.1` (Cloudflare), the same target the built-in `omarchy.network`
+plugin pings for the same purpose. Click the gear next to "Ping" to set
+either interface's target to a numeric IPv4 address (no hostnames), or
+turn on "Shared Ping-target" to keep both on the same address. Stored at
+`~/.config/simulnetdevice/settings.json`.
 
 ## Tested on
 
-Omarchy 4.0.2 (Arch Linux, kernel 7.1.9-arch1-2) on a Lenovo ThinkPad E15
-Gen 2, NetworkManager (`nmcli` 1.58.1), one Wi-Fi adapter + one wired
+Omarchy 4.0.4 (Arch Linux, kernel 7.2.5-3-omarchy) on a Lenovo ThinkPad
+E15 Gen 2, NetworkManager (`nmcli` 1.58.1), one Wi-Fi adapter + one wired
 Ethernet adapter. See Known limitations below for what's untested (a
 second adapter of the same type, non-Arch systems, etc.).
 
