@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import qs.Ui
 import qs.Commons
@@ -142,6 +143,75 @@ Panel {
     } else {
       root.refreshConflictCheck()
     }
+  }
+
+  // ---------- Ping target settings ----------
+  // Persisted to ~/.config/simulnetdevice/settings.json. Owned here (not
+  // per-section) so there's one file watcher/writer even though the two
+  // values can be edited independently -- avoids two FileViews racing on
+  // the same file, same reasoning ProfileList.qml's single FileView follows
+  // for profiles.json.
+  property bool linkPingTargets: true
+  property string wifiPingTarget: Model.DEFAULT_PING_TARGET
+  property string ethernetPingTarget: Model.DEFAULT_PING_TARGET
+
+  readonly property string settingsPath: (Quickshell.env("HOME") || "") + "/.config/simulnetdevice/settings.json"
+
+  FileView {
+    id: settingsFile
+    path: root.settingsPath
+    watchChanges: true
+    onLoaded: root.applySettings(Model.loadSettings(text()))
+    onLoadFailed: function(error) { root.applySettings(Model.loadSettings("")) }
+    onFileChanged: reload()
+  }
+
+  function applySettings(settings) {
+    root.linkPingTargets = settings.linkPingTargets
+    root.wifiPingTarget = settings.wifiPingTarget
+    root.ethernetPingTarget = settings.ethernetPingTarget
+  }
+
+  // FileView doesn't create missing parent directories on its own.
+  Process {
+    id: ensureSettingsDirProc
+    command: ["mkdir", "-p", (Quickshell.env("HOME") || "") + "/.config/simulnetdevice"]
+  }
+
+  function persistSettings() {
+    if (!ensureSettingsDirProc.running) ensureSettingsDirProc.running = true
+    settingsFile.setText(Model.serializeSettings({
+      linkPingTargets: root.linkPingTargets,
+      wifiPingTarget: root.wifiPingTarget,
+      ethernetPingTarget: root.ethernetPingTarget
+    }))
+  }
+
+  // Called by either section's StatsGrid gear. When linked, both interfaces
+  // move together regardless of which one's editor made the change.
+  function setPingTarget(section, value) {
+    if (!Model.isValidIpv4(value)) return
+    if (root.linkPingTargets) {
+      root.wifiPingTarget = value
+      root.ethernetPingTarget = value
+    } else if (section === "wifi") {
+      root.wifiPingTarget = value
+    } else {
+      root.ethernetPingTarget = value
+    }
+    persistSettings()
+  }
+
+  // Turning linking on snaps both values to whichever section's editor
+  // flipped the toggle, so linked never leaves them silently mismatched.
+  function setLinkPingTargets(linked, sourceSection) {
+    root.linkPingTargets = linked
+    if (linked) {
+      var value = sourceSection === "wifi" ? root.wifiPingTarget : root.ethernetPingTarget
+      root.wifiPingTarget = value
+      root.ethernetPingTarget = value
+    }
+    persistSettings()
   }
 
   // ---------- omarchy.network conflict notice ----------
@@ -328,6 +398,10 @@ Panel {
             width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
             bar: root.bar
             opened: root.opened
+            pingTarget: root.wifiPingTarget
+            linkPingTargets: root.linkPingTargets
+            onPingTargetSaveRequested: function(value) { root.setPingTarget("wifi", value) }
+            onLinkPingTargetsToggled: function(linked) { root.setLinkPingTargets(linked, "wifi") }
             // Ethernet's routeMetric while Ethernet is connected, else undefined.
             primaryCompareMetric: ethernetSection.isConnected ? ethernetSection.routeMetric : undefined
             onRouteMetricApplied: ethernetSection.setRouteMetric(Model.SECONDARY_METRIC)
@@ -350,6 +424,10 @@ Panel {
             width: panel.twoColumn ? (sectionsGrid.width - sectionsGrid.columnSpacing) / 2 : sectionsGrid.width
             bar: root.bar
             opened: root.opened
+            pingTarget: root.ethernetPingTarget
+            linkPingTargets: root.linkPingTargets
+            onPingTargetSaveRequested: function(value) { root.setPingTarget("ethernet", value) }
+            onLinkPingTargetsToggled: function(linked) { root.setLinkPingTargets(linked, "ethernet") }
             // See WifiSection's identical comment.
             primaryCompareMetric: wifiSection.isConnected ? wifiSection.routeMetric : undefined
             onRouteMetricApplied: wifiSection.setRouteMetric(Model.SECONDARY_METRIC)

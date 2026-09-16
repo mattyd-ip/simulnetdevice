@@ -34,7 +34,40 @@ Item {
   readonly property int sustainedLossThreshold: 5  // ~15s at the 3s poll interval
   signal sustainedPacketLoss()
 
-  implicitHeight: visibleGrid ? grid.implicitHeight : 0
+  // ---------- Ping target ----------
+  property string pingTarget: Model.DEFAULT_PING_TARGET
+  property bool linkPingTargets: true
+  property bool editingPingTarget: false
+  property string pingTargetDraft: ""
+  readonly property bool pingTargetValid: Model.isValidIpv4(pingTargetDraft)
+  // Used by the owning section's anyFieldFocused, same convention as
+  // ProfileList.qml/WifiScanList.qml's own anyFieldFocused.
+  readonly property bool anyFieldFocused: editingPingTarget && pingTargetInput.activeFocus
+  signal pingTargetSaveRequested(string value)
+  signal linkPingTargetsToggled(bool linked)
+
+  function openPingTargetEditor() {
+    pingTargetDraft = pingTarget
+    editingPingTarget = true
+  }
+  function cancelPingTargetEdit() {
+    editingPingTarget = false
+  }
+  function savePingTarget() {
+    if (!pingTargetValid) return
+    pingTargetSaveRequested(pingTargetDraft)
+    editingPingTarget = false
+  }
+
+  // Keeps an already-open editor in sync with a linked edit made from the
+  // sibling section, and drops ping history so the rolling average doesn't
+  // blend samples from the old target with the new one.
+  onPingTargetChanged: {
+    pingTargetDraft = pingTarget
+    resetPingHistory()
+  }
+
+  implicitHeight: visibleGrid ? contentColumn.implicitHeight : 0
   visible: visibleGrid
 
   onInfoChanged: {
@@ -57,6 +90,12 @@ Item {
     if (Model.isSustainedPingLoss(internetPingSamples, sustainedLossThreshold)) sustainedPacketLoss()
   }
 
+  function resetPingHistory() {
+    internetPingSamples = []
+    internetPingLatency = -1
+    internetPingPacketLoss = 0
+  }
+
   // Clears throughput and ping history.
   function reset() {
     prevIface = ""
@@ -65,9 +104,7 @@ Item {
     prevSampleTime = 0
     downloadRate = 0
     uploadRate = 0
-    internetPingSamples = []
-    internetPingLatency = -1
-    internetPingPacketLoss = 0
+    resetPingHistory()
   }
 
   function copyToClipboard(value) {
@@ -75,45 +112,142 @@ Item {
     Quickshell.execDetached(["bash", "-c", "printf %s " + Util.shellQuote(value) + " | wl-copy"])
   }
 
-  GridLayout {
-    id: grid
+  Column {
+    id: contentColumn
     width: parent.width
-    columns: 4
-    columnSpacing: Style.space(20)
-    rowSpacing: Style.spacing.labelGap
+    spacing: Style.space(8)
 
-    InfoLabel { text: "Ping" }
-    DetailValue {
-      text: Model.formatPingLatency(root.internetPingLatency, root.hasInternetPing)
-      color: root.internetPingPacketLoss > 0 ? root.bar.urgent : root.bar.foreground
+    GridLayout {
+      id: grid
+      width: parent.width
+      columns: 4
+      columnSpacing: Style.space(20)
+      rowSpacing: Style.spacing.labelGap
+
+      RowLayout {
+        spacing: Style.space(2)
+
+        InfoLabel { text: "Ping" }
+        PanelActionButton {
+          iconText: "󰒓"
+          tooltipText: "Ping target"
+          foreground: root.bar.foreground
+          fontFamily: root.bar.fontFamily
+          onClicked: root.editingPingTarget ? root.cancelPingTargetEdit() : root.openPingTargetEditor()
+        }
+      }
+      DetailValue {
+        text: Model.formatPingLatency(root.internetPingLatency, root.hasInternetPing)
+        color: root.internetPingPacketLoss > 0 ? root.bar.urgent : root.bar.foreground
+      }
+      InfoLabel { text: "Packet Loss" }
+      DetailValue {
+        text: Model.formatPacketLoss(root.internetPingPacketLoss, root.hasInternetPing)
+        color: root.internetPingPacketLoss > 0 ? root.bar.urgent : root.bar.foreground
+      }
+
+      InfoLabel { text: "Receiving" }
+      DetailValue { text: root.hasTransferStats ? Model.formatRate(root.downloadRate) : "--" }
+      InfoLabel { text: "Sending" }
+      DetailValue { text: root.hasTransferStats ? Model.formatRate(root.uploadRate) : "--" }
+
+      InfoLabel { text: "Downloaded" }
+      DetailValue { text: root.hasTransferStats ? Model.formatBytes(parseFloat(root.info.rx_bytes || "0")) : "--" }
+      InfoLabel { text: "Uploaded" }
+      DetailValue { text: root.hasTransferStats ? Model.formatBytes(parseFloat(root.info.tx_bytes || "0")) : "--" }
+
+      InfoLabel { text: "IP Address" }
+      DetailValue {
+        text: root.info.ip && root.info.prefix ? root.info.ip + "/" + root.info.prefix : "--"
+        copyable: !!root.info.ip
+        tooltipText: "Copy IP"
+      }
+      InfoLabel { text: "Gateway" }
+      DetailValue {
+        text: root.info.gateway || "--"
+        copyable: !!root.info.gateway
+        tooltipText: "Copy gateway"
+      }
     }
-    InfoLabel { text: "Packet Loss" }
-    DetailValue {
-      text: Model.formatPacketLoss(root.internetPingPacketLoss, root.hasInternetPing)
-      color: root.internetPingPacketLoss > 0 ? root.bar.urgent : root.bar.foreground
-    }
 
-    InfoLabel { text: "Receiving" }
-    DetailValue { text: root.hasTransferStats ? Model.formatRate(root.downloadRate) : "--" }
-    InfoLabel { text: "Sending" }
-    DetailValue { text: root.hasTransferStats ? Model.formatRate(root.uploadRate) : "--" }
+    // Ping-target editor: collapsed unless the gear next to "Ping" is toggled.
+    Item {
+      id: pingTargetEditorClip
+      width: parent.width
+      clip: true
+      visible: height > 0
+      height: root.editingPingTarget ? pingTargetEditor.implicitHeight : 0
 
-    InfoLabel { text: "Downloaded" }
-    DetailValue { text: root.hasTransferStats ? Model.formatBytes(parseFloat(root.info.rx_bytes || "0")) : "--" }
-    InfoLabel { text: "Uploaded" }
-    DetailValue { text: root.hasTransferStats ? Model.formatBytes(parseFloat(root.info.tx_bytes || "0")) : "--" }
+      Behavior on height { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
-    InfoLabel { text: "IP Address" }
-    DetailValue {
-      text: root.info.ip && root.info.prefix ? root.info.ip + "/" + root.info.prefix : "--"
-      copyable: !!root.info.ip
-      tooltipText: "Copy IP"
-    }
-    InfoLabel { text: "Gateway" }
-    DetailValue {
-      text: root.info.gateway || "--"
-      copyable: !!root.info.gateway
-      tooltipText: "Copy gateway"
+      Column {
+        id: pingTargetEditor
+        width: parent.width
+        spacing: Style.space(8)
+
+        Row {
+          spacing: Style.space(6)
+
+          ToggleSwitch {
+            checked: root.linkPingTargets
+            foreground: root.bar.foreground
+            onToggled: root.linkPingTargetsToggled(!root.linkPingTargets)
+          }
+          // The shared ToggleSwitch's on/off track shading is theme-derived
+          // and can read as low-contrast; this badge makes the state
+          // unambiguous regardless of theme.
+          Text {
+            textFormat: Text.PlainText
+            text: root.linkPingTargets ? "On" : "Off"
+            anchors.verticalCenter: parent.verticalCenter
+            color: root.linkPingTargets ? Color.accent : Qt.darker(root.bar.foreground, 1.4)
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+          Text {
+            textFormat: Text.PlainText
+            text: "Shared Ping-target"
+            anchors.verticalCenter: parent.verticalCenter
+            color: root.bar.foreground
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+        }
+
+        RowLayout {
+          width: parent.width
+          spacing: Style.space(6)
+
+          TextField {
+            id: pingTargetInput
+            Layout.fillWidth: true
+            text: root.pingTargetDraft
+            placeholderText: Model.DEFAULT_PING_TARGET
+            font.pixelSize: Style.font.bodySmall
+            foreground: root.bar.foreground
+            horizontalPadding: Style.spacing.controlGap
+            verticalPadding: Style.spacing.controlPaddingY
+            onTextChanged: root.pingTargetDraft = text
+            onAccepted: root.savePingTarget()
+          }
+          PanelActionButton {
+            iconText: "󰄬"
+            tooltipText: "Save"
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            enabled: root.pingTargetValid
+            onClicked: root.savePingTarget()
+          }
+          PanelActionButton {
+            iconText: "󰅙"
+            tooltipText: "Cancel"
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            onClicked: root.cancelPingTargetEdit()
+          }
+        }
+      }
     }
   }
 

@@ -16,6 +16,14 @@ Item {
   required property QtObject bar
   property bool opened: false
 
+  // ---------- Ping target ----------
+  // Owned by Panel.qml (persisted to settings.json); this section just
+  // reflects the current value and asks Panel.qml to change it.
+  property string pingTarget: Model.DEFAULT_PING_TARGET
+  property bool linkPingTargets: true
+  signal pingTargetSaveRequested(string value)
+  signal linkPingTargetsToggled(bool linked)
+
   // ---------- Keyboard cursor ----------
   // Driven from Panel.qml. cursorGroup is -1 when the cursor belongs to
   // EthernetSection.
@@ -224,7 +232,7 @@ Item {
   }
 
   readonly property string statusScript:
-    "iface=$1; do_ping=$2\n" +
+    "iface=$1; do_ping=$2; ping_target=$3; : \"${ping_target:=1.1.1.1}\"\n" +
     "if [[ -z $iface ]]; then printf 'state\\tno-device\\n'; exit 0; fi\n" +
     "nmstate=$(nmcli -t -f GENERAL.STATE dev show \"$iface\" 2>/dev/null | cut -d: -f2-)\n" +
     "conn=$(nmcli -t -f GENERAL.CONNECTION dev show \"$iface\" 2>/dev/null | cut -d: -f2-)\n" +
@@ -251,7 +259,7 @@ Item {
     "if [[ -r /sys/class/net/$iface/statistics/tx_bytes ]]; then printf 'tx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/tx_bytes)\"; fi\n" +
     "if [[ $do_ping == 1 ]]; then\n" +
     // -I $iface scopes the ping to this interface.
-    "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
+    "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" \"$ping_target\" 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
     "  printf 'internet_ping_ms\\t%s\\n' \"${ms:-}\"\n" +
     "fi\n" +
     "if [[ -n $conn ]]; then\n" +
@@ -264,7 +272,7 @@ Item {
 
   function refresh() {
     if (statusProc.running) return
-    statusProc.command = ["bash", "-c", statusScript, "wifi-status", iface, root.opened ? "1" : "0"]
+    statusProc.command = ["bash", "-c", statusScript, "wifi-status", iface, root.opened ? "1" : "0", root.pingTarget]
     statusProc.running = true
   }
 
@@ -419,7 +427,11 @@ Item {
       bar: root.bar
       info: root.info
       visibleGrid: root.isConnected
+      pingTarget: root.pingTarget
+      linkPingTargets: root.linkPingTargets
       onSustainedPacketLoss: root.recoverConnection()
+      onPingTargetSaveRequested: function(value) { root.pingTargetSaveRequested(value) }
+      onLinkPingTargetsToggled: function(linked) { root.linkPingTargetsToggled(linked) }
     }
 
     // ---------- Wi-Fi band ----------
@@ -511,5 +523,5 @@ Item {
 
   // Used by Panel.qml's PanelKeyCatcher to block navigation while a
   // password field is focused.
-  readonly property bool anyFieldFocused: scanList.anyFieldFocused
+  readonly property bool anyFieldFocused: scanList.anyFieldFocused || statsGrid.anyFieldFocused
 }

@@ -17,6 +17,14 @@ Item {
   // running regardless.
   property bool opened: false
 
+  // ---------- Ping target ----------
+  // Owned by Panel.qml (persisted to settings.json); this section just
+  // reflects the current value and asks Panel.qml to change it.
+  property string pingTarget: Model.DEFAULT_PING_TARGET
+  property bool linkPingTargets: true
+  signal pingTargetSaveRequested(string value)
+  signal linkPingTargetsToggled(bool linked)
+
   // ---------- Keyboard cursor ----------
   // Driven from Panel.qml. cursorGroup is -1 when the cursor belongs to
   // WifiSection.
@@ -414,10 +422,10 @@ Item {
     }
   }
 
-  // The ping to 1.1.1.1 (1s timeout) only runs while do_ping is 1 (the
-  // popup is open); carrier/ip/route/nmcli reads always run.
+  // The ping (1s timeout) only runs while do_ping is 1 (the popup is
+  // open); carrier/ip/route/nmcli reads always run.
   readonly property string statusScript:
-    "iface=$1; do_ping=$2\n" +
+    "iface=$1; do_ping=$2; ping_target=$3; : \"${ping_target:=1.1.1.1}\"\n" +
     "if [[ -z $iface || ! -e /sys/class/net/$iface ]]; then printf 'state\\tno-device\\n'; exit 0; fi\n" +
     "carrier=$(cat \"/sys/class/net/$iface/carrier\" 2>/dev/null)\n" +
     "speed=$(cat \"/sys/class/net/$iface/speed\" 2>/dev/null)\n" +
@@ -446,7 +454,7 @@ Item {
     "if [[ -r /sys/class/net/$iface/statistics/tx_bytes ]]; then printf 'tx_bytes\\t%s\\n' \"$(cat /sys/class/net/$iface/statistics/tx_bytes)\"; fi\n" +
     "if [[ $do_ping == 1 ]]; then\n" +
     // -I $iface scopes the ping to this interface.
-    "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" 1.1.1.1 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
+    "  ms=$(LC_ALL=C ping -n -c1 -W1 -I \"$iface\" \"$ping_target\" 2>/dev/null | awk -F'time[=<]' '/time[=<]/ { split($2, p, \" \"); print p[1]; exit }')\n" +
     "  printf 'internet_ping_ms\\t%s\\n' \"${ms:-}\"\n" +
     "fi\n" +
     "if [[ -n $conn ]]; then\n" +
@@ -465,7 +473,7 @@ Item {
 
   function refresh() {
     if (statusProc.running) return
-    statusProc.command = ["bash", "-c", statusScript, "ethernet-status", iface, root.opened ? "1" : "0"]
+    statusProc.command = ["bash", "-c", statusScript, "ethernet-status", iface, root.opened ? "1" : "0", root.pingTarget]
     statusProc.running = true
   }
 
@@ -604,7 +612,11 @@ Item {
       bar: root.bar
       info: root.info
       visibleGrid: root.isConnected
+      pingTarget: root.pingTarget
+      linkPingTargets: root.linkPingTargets
       onSustainedPacketLoss: root.recoverConnection()
+      onPingTargetSaveRequested: function(value) { root.pingTargetSaveRequested(value) }
+      onLinkPingTargetsToggled: function(linked) { root.linkPingTargetsToggled(linked) }
     }
 
     // ---------- DHCP / Static IP ----------
@@ -817,5 +829,5 @@ Item {
 
   // True while a static-IP field is focused; used by Panel.qml's
   // PanelKeyCatcher.blocked. Gated on manualEntryOpen, not just .activeFocus.
-  readonly property bool anyFieldFocused: (root.manualEntryOpen && (addressInput.activeFocus || gatewayInput.activeFocus || dnsInput.activeFocus)) || profileList.anyFieldFocused
+  readonly property bool anyFieldFocused: (root.manualEntryOpen && (addressInput.activeFocus || gatewayInput.activeFocus || dnsInput.activeFocus)) || profileList.anyFieldFocused || statsGrid.anyFieldFocused
 }
