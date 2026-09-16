@@ -29,6 +29,19 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 
 ---
 
+## 2026-09-15T21:48:38-04:00
+
+### Added
+
+- Configurable ping target — each interface's Ping/Packet Loss stats now
+  measure against a user-set IPv4 address instead of a fixed one.
+  Default stays `1.1.1.1` for existing installs; click the gear next to
+  "Ping" to change it, or turn on "Shared Ping-target" to keep both
+  interfaces on the same address
+  ([`a1c3b11`](https://github.com/mattyd-ip/simulnetdevice/commit/a1c3b11),
+  [`2b0a997`](https://github.com/mattyd-ip/simulnetdevice/commit/2b0a997),
+  [`d7346f0`](https://github.com/mattyd-ip/simulnetdevice/commit/d7346f0)).
+
 ## 2026-09-08T13:25:56-04:00
 
 Prepared for submission to the Omarchy plugin marketplace.
