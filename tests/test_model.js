@@ -291,5 +291,38 @@ test("serializeProfiles round-trips through loadProfiles", function() {
   assert.deepStrictEqual(M.loadProfiles(M.serializeProfiles(profiles)), profiles)
 })
 
+// ---- ping-target settings ----
+
+test("loadSettings: missing/corrupt file yields defaults, not a throw", function() {
+  var defaults = { linkPingTargets: true, wifiPingTarget: "1.1.1.1", ethernetPingTarget: "1.1.1.1" }
+  assert.deepStrictEqual(M.loadSettings(""), defaults)
+  assert.deepStrictEqual(M.loadSettings("not json"), defaults)
+  assert.deepStrictEqual(M.loadSettings("{}"), defaults)
+})
+
+test("loadSettings: returns a valid full object as-is", function() {
+  var input = { linkPingTargets: false, wifiPingTarget: "192.168.1.1", ethernetPingTarget: "9.9.9.9" }
+  assert.deepStrictEqual(M.loadSettings(JSON.stringify(input)), input)
+})
+
+test("loadSettings: each field falls back to its own default independently", function() {
+  var input = { linkPingTargets: "not a bool", wifiPingTarget: "not an ip", ethernetPingTarget: "9.9.9.9" }
+  assert.deepStrictEqual(M.loadSettings(JSON.stringify(input)), {
+    linkPingTargets: true,
+    wifiPingTarget: "1.1.1.1",
+    ethernetPingTarget: "9.9.9.9"
+  })
+})
+
+test("serializeSettings clamps invalid input to defaults", function() {
+  var out = M.loadSettings(M.serializeSettings({ linkPingTargets: "nope", wifiPingTarget: "bad", ethernetPingTarget: "9.9.9.9" }))
+  assert.deepStrictEqual(out, { linkPingTargets: true, wifiPingTarget: "1.1.1.1", ethernetPingTarget: "9.9.9.9" })
+})
+
+test("serializeSettings round-trips through loadSettings", function() {
+  var settings = { linkPingTargets: false, wifiPingTarget: "10.0.0.1", ethernetPingTarget: "10.0.0.2" }
+  assert.deepStrictEqual(M.loadSettings(M.serializeSettings(settings)), settings)
+})
+
 console.log(passed + " passed, " + failed + " failed")
 process.exit(failed === 0 ? 0 : 1)

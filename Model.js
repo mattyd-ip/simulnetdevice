@@ -339,6 +339,34 @@ function serializeProfiles(profiles) {
   return JSON.stringify(Array.isArray(profiles) ? profiles : [], null, 2)
 }
 
+var DEFAULT_PING_TARGET = "1.1.1.1"
+
+// A missing/corrupt file, or an invalid individual field, falls back to
+// that field's own default rather than throwing or discarding the rest.
+function loadSettings(text) {
+  var result = { linkPingTargets: true, wifiPingTarget: DEFAULT_PING_TARGET, ethernetPingTarget: DEFAULT_PING_TARGET }
+  var raw = String(text || "").trim()
+  if (raw === "") return result
+  try {
+    var parsed = JSON.parse(raw)
+    if (typeof parsed.linkPingTargets === "boolean") result.linkPingTargets = parsed.linkPingTargets
+    if (isValidIpv4(parsed.wifiPingTarget)) result.wifiPingTarget = parsed.wifiPingTarget
+    if (isValidIpv4(parsed.ethernetPingTarget)) result.ethernetPingTarget = parsed.ethernetPingTarget
+    return result
+  } catch (e) {
+    return result
+  }
+}
+
+function serializeSettings(settings) {
+  var value = settings || {}
+  return JSON.stringify({
+    linkPingTargets: typeof value.linkPingTargets === "boolean" ? value.linkPingTargets : true,
+    wifiPingTarget: isValidIpv4(value.wifiPingTarget) ? value.wifiPingTarget : DEFAULT_PING_TARGET,
+    ethernetPingTarget: isValidIpv4(value.ethernetPingTarget) ? value.ethernetPingTarget : DEFAULT_PING_TARGET
+  }, null, 2)
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     parseKeyValue: parseKeyValue,
@@ -377,6 +405,9 @@ if (typeof module !== "undefined") {
     validateProfileName: validateProfileName,
     profileSummary: profileSummary,
     loadProfiles: loadProfiles,
-    serializeProfiles: serializeProfiles
+    serializeProfiles: serializeProfiles,
+    DEFAULT_PING_TARGET: DEFAULT_PING_TARGET,
+    loadSettings: loadSettings,
+    serializeSettings: serializeSettings
   }
 }
