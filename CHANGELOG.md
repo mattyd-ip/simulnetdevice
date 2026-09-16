@@ -29,6 +29,18 @@ Notable changes to SimulNetDevice, for users deciding whether to update.
 
 ---
 
+## 2026-09-15T22:28:52-04:00
+
+### Fixed
+
+- Sustained-ping-loss recovery (the automatic Wi-Fi radio-cycle /
+  Ethernet reconnect that runs after ~15s of lost pings) now attempts
+  once per outage instead of repeating every ~30-45 seconds for however
+  long the outage lasts. During a real internet outage, the repeated
+  cycling made it difficult to use the panel at all while it was
+  happening
+  ([`701f4c5`](https://github.com/mattyd-ip/simulnetdevice/commit/701f4c5)).
+
 ## 2026-09-15T21:48:38-04:00
 
 ### Added
