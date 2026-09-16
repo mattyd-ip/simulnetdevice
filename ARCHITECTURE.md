@@ -98,13 +98,24 @@ Mouse hover does not move the keyboard cursor.
 **Two self-recovery mechanisms exist beyond passive status reporting.**
 
 1. *Sustained ping-loss recovery.* `StatsGrid.qml` emits
-   `sustainedPacketLoss()` when `Model.isSustainedPingLoss()` sees the
-   most recent 5 samples (~15s) all lost. `WifiSection.qml` responds with
-   a radio off → 1.5s → on cycle; `EthernetSection.qml` responds with a
-   disconnect → reconnect chain through the section's existing
-   `actionProc`/`pendingAction` machinery (`recoveryPhase`: `"" |
-   "disconnecting" | "connecting"`). Both sides guard against
-   re-triggering mid-recovery and enforce a cooldown after any attempt.
+   `sustainedPacketLoss()` once when `Model.isSustainedPingLoss()`
+   transitions from false to true (the most recent 5 samples, ~15s, going
+   all-lost) — `sustainedLossActive` tracks that state so the signal
+   fires on the edge, not on every poll for as long as the loss
+   continues. That one-shot-per-episode design is deliberate: this can't
+   distinguish a stuck local link (which a cycle can fix) from an
+   upstream/internet-wide outage (which cycling the local interface does
+   nothing for, since it reconnects fine to the same broken upstream
+   every time), so it gets one attempt per episode rather than retrying
+   indefinitely for however long an outage lasts. `WifiSection.qml`
+   responds with a radio off → 1.5s → on cycle; `EthernetSection.qml`
+   responds with a disconnect → reconnect chain through the section's
+   existing `actionProc`/`pendingAction` machinery (`recoveryPhase`: `"" |
+   "disconnecting" | "connecting"`). Both sides still guard against
+   re-triggering mid-recovery and enforce a cooldown after any attempt,
+   as a second line of defense; `sustainedLossActive` resetting to false
+   (a real ping succeeds again, or `resetPingHistory()` runs) is what
+   re-arms the next episode.
 2. *Ethernet apply retry.* When an Apply/DHCP/Static action fails,
    `EthernetSection.qml` distinguishes two causes: no cable sets
    `retryActionOnCarrier` and waits for `hasCable` to flip true before

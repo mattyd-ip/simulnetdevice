@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "simulnetdevice",
   "name": "SimulNetDevice",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "mattyd-ip",
   "license": "MIT",
   "description": "Independent Wi-Fi + Ethernet status, ping, and throughput at the same time, plus Wi-Fi scanning, saved static-IP profiles, and primary-interface routing control.",

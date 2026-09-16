@@ -30,8 +30,14 @@ Item {
   readonly property bool hasInternetPing: internetPingSamples.length > 0
   readonly property bool hasTransferStats: info.rx_bytes !== undefined
 
-  // Fired when the most recent sustainedLossThreshold samples are all lost.
+  // Fired once when the most recent sustainedLossThreshold samples first
+  // go all-lost, not on every poll for as long as the loss continues --
+  // a downstream recovery (radio-cycle / disconnect-reconnect) should get
+  // one attempt per outage, not one every ~30-45s for the outage's whole
+  // duration. sustainedLossActive tracks whether we're already in that
+  // state so the signal only fires on the false -> true transition.
   readonly property int sustainedLossThreshold: 5  // ~15s at the 3s poll interval
+  property bool sustainedLossActive: false
   signal sustainedPacketLoss()
 
   // ---------- Ping target ----------
@@ -87,13 +93,16 @@ Item {
     internetPingLatency = p.internetPingLatency
     internetPingPacketLoss = p.internetPingPacketLoss
 
-    if (Model.isSustainedPingLoss(internetPingSamples, sustainedLossThreshold)) sustainedPacketLoss()
+    var isLostNow = Model.isSustainedPingLoss(internetPingSamples, sustainedLossThreshold)
+    if (isLostNow && !root.sustainedLossActive) sustainedPacketLoss()
+    root.sustainedLossActive = isLostNow
   }
 
   function resetPingHistory() {
     internetPingSamples = []
     internetPingLatency = -1
     internetPingPacketLoss = 0
+    sustainedLossActive = false
   }
 
   // Clears throughput and ping history.
