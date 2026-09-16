@@ -5,14 +5,14 @@
   "version": "0.2.0",
   "author": "mattyd-ip",
   "license": "MIT",
-  "description": "Shows Wi-Fi and Ethernet status at the same time, with saved static IP profiles and primary-interface routing control.",
+  "description": "Independent Wi-Fi + Ethernet status, ping, and throughput at the same time, plus Wi-Fi scanning, saved static-IP profiles, and primary-interface routing control.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "Panel.qml"
   },
   "barWidget": {
     "displayName": "SimulNetDevice",
-    "description": "Shows Wi-Fi and Ethernet status at the same time, with saved static IP profiles and primary-interface routing control.",
+    "description": "Independent Wi-Fi + Ethernet status, ping, and throughput at the same time, plus Wi-Fi scanning, saved static-IP profiles, and primary-interface routing control.",
     "category": "Network",
     "allowMultiple": false,
     "defaultSection": "right"
