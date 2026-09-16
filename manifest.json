@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "simulnetdevice",
   "name": "SimulNetDevice",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "mattyd-ip",
   "license": "MIT",
   "description": "Shows Wi-Fi and Ethernet status at the same time, with saved static IP profiles and primary-interface routing control.",
